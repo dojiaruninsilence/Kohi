@@ -5,7 +5,7 @@
 		}
 	],
 	"settings": {
-		"workbench.colorTheme": "Default Dark Modern",
+		"workbench.colorTheme": "Gruvbox Dark (Hard)",
 		"terminal.integrated.fontFamily": "Cascadia Mono PL",
 		"terminal.integrated.fontWeight": "1",
 		"workbench.editor.showTabs": "single",
