@@ -10,7 +10,7 @@ typedef struct platform_state {
 } platform_state;
 
 // these are all for the environment the final application will be running on, and will be dependent on user input, system and such
-KAPI b8 platform_startup(
+b8 platform_startup(
     platform_state* plat_state,
     const char* application_name,  // mostly for windowed apps
     i32 x,
@@ -19,15 +19,15 @@ KAPI b8 platform_startup(
     i32 height);
 
 // do all the shut down stuff - get a pointer to platform_state
-KAPI void platform_shutdown(platform_state* plat_state);
+void platform_shutdown(platform_state* plat_state);
 
 // needs to be done continuosly through out the run loop - will be coming back to this he says
-KAPI b8 platform_pump_messages(platform_state* plat_state);
+b8 platform_pump_messages(platform_state* plat_state);
 
 // this is simple in the beginning but becomes more complicated as we progress - so see this and pay close attention
 // platform specific ways to handle memory - different platforms handle memory differently
-void* platform_allocate(u64 size, b8 aligned);
-void platform_free(void* block, b8 aligned);
+KAPI void* platform_allocate(u64 size, b8 aligned);  // KAPI is temp
+KAPI void platform_free(void* block, b8 aligned);    // KAPI is temp
 void* platform_zero_memory(void* block, u64 size);
 void* platform_copy_memory(void* dest, const void* source, u64 size);
 void* platform_set_memory(void* dest, i32 value, u64 size);
