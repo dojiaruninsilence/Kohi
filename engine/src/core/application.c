@@ -6,6 +6,7 @@
 
 #include "platform/platform.h"
 #include "core/kmemory.h"
+#include "core/event.h"
 
 // there will only be one instance of application running
 
@@ -43,6 +44,12 @@ b8 application_create(game* game_inst) {  // this error does not seem to actuall
 
     app_state.is_running = TRUE;     // boolean to say the app is running
     app_state.is_suspended = FALSE;  // suspended is a state in which the application shouldnt be updating or anything - will implement later
+
+    // initialize events and verify it worked
+    if(!event_initialize()) {
+        KERROR("Event System failed initialization. Application cannot continue");
+        return FALSE;
+    }
 
     // start the platform layer and input the config data from the application_config struct
     if (!platform_startup(&app_state.platform,
@@ -95,7 +102,9 @@ b8 application_run() {
 
     app_state.is_running = FALSE;  // in the event it exits the loop while true make sure it shutsdown
 
-    platform_shutdown(&app_state.platform);  // shut doen the platform layer
+    event_shutdown(); // shutdown the event system
+
+    platform_shutdown(&app_state.platform);  // shut down the platform layer
 
     return TRUE;
 }
