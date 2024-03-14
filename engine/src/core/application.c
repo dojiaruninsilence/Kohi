@@ -5,6 +5,7 @@
 #include "logger.h"
 
 #include "platform/platform.h"
+#include "core/kmemory.h"
 
 // there will only be one instance of application running
 
@@ -45,11 +46,11 @@ b8 application_create(game* game_inst) {  // this error does not seem to actuall
 
     // start the platform layer and input the config data from the application_config struct
     if (!platform_startup(&app_state.platform,
-                          game_inst->app_config.name,
-                          game_inst->app_config.start_pos_x,
-                          game_inst->app_config.start_pos_y,
-                          game_inst->app_config.start_width,
-                          game_inst->app_config.start_height)) {
+                        game_inst->app_config.name,
+                        game_inst->app_config.start_pos_x,
+                        game_inst->app_config.start_pos_y,
+                        game_inst->app_config.start_width,
+                        game_inst->app_config.start_height)) {
         return FALSE;
     }
 
@@ -68,6 +69,8 @@ b8 application_create(game* game_inst) {  // this error does not seem to actuall
 }
 
 b8 application_run() {
+    // test of the memory subsystem
+    KINFO(get_memory_usage_str())
     // this is basically the "game" loop at the moment will run as long as app state remains true
     while (app_state.is_running) {
         if (!platform_pump_messages(&app_state.platform)) {  // if there are no events return false and shut the app doen
