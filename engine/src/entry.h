@@ -10,7 +10,6 @@ extern b8 create_game(game* out_game);  // tell compiler we have an externally d
 
 // this is now the main entry point for the entire application
 int main(void) {
-
     initialize_memory();
 
     // request the game instance from the application
@@ -28,7 +27,7 @@ int main(void) {
 
     // create the game? - initialization
     if (!application_create(&game_inst)) {  // passes the address
-        KINFO("Application failed to create!");
+        KFATAL("Application failed to create!");
         return 1;
     }
 
