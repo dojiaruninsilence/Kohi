@@ -1,6 +1,7 @@
 #include "kmemory.h"
 
 #include "core/logger.h"
+#include "core/kstring.h"
 #include "platform/platform.h"
 
 // TODO: custom string library
@@ -113,6 +114,6 @@ char* get_memory_usage_str() {
         offset += length;                                                                                     // add new length to the offset
     }
     // calling this dynamically like this is not ideal, but since it will be used infrequently for debug stuff it should be ok
-    char* out_string = _strdup(buffer);  // copies the string?
+    char* out_string = string_duplicate(buffer);  // copies the string?
     return out_string;                   // have to be careful with this.  have to free this everytime that this is called
 }
