@@ -7,7 +7,10 @@
 #include "platform/platform.h"
 #include "core/kmemory.h"
 #include "core/event.h"
-#include "core/input.h" 
+#include "core/input.h"
+#include "core/clock.h"
+
+#include "renderer/renderer_frontend.h"
 
 // there will only be one instance of application running
 
@@ -18,6 +21,7 @@ typedef struct application_state {
     platform_state platform;  // pointer to platform state - dynamic allocation? need to look all these up
     i16 width;
     i16 height;
+    clock clock;
     f64 last_time;  // has to do with the game loop
 } application_state;
 
@@ -26,8 +30,8 @@ static application_state app_state;
 
 // foreward declared functions, look up what this means
 // event handlers
-b8 application_on_event(u16 code, void* sender, void* listener_inst, event_context context); // genaric
-b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context); // on key
+b8 application_on_event(u16 code, void* sender, void* listener_inst, event_context context);  // genaric
+b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context);    // on key
 
 b8 application_create(game* game_inst) {  // this error does not seem to actually be an error
     if (initialized) {
@@ -39,7 +43,7 @@ b8 application_create(game* game_inst) {  // this error does not seem to actuall
 
     // initialize subsystems for the application here
     initilize_logging();  // logger.h in core foleder
-    input_initialize();  // initialize the input subsystem
+    input_initialize();   // initialize the input subsystem
 
     // test stuff TODO: will be removed
     KFATAL("a test message: %f", 3.14f);
@@ -73,6 +77,12 @@ b8 application_create(game* game_inst) {  // this error does not seem to actuall
         return FALSE;
     }
 
+    // renderer startup
+    if (!renderer_initialize(game_inst->app_config.name, &app_state.platform)) {
+        KFATAL("Game failed to initialize.");
+        return FALSE;
+    }
+
     // initialize the game
     if (!app_state.game_inst->initialize(app_state.game_inst)) {
         KFATAL("Game failed to initialize.")
@@ -88,6 +98,14 @@ b8 application_create(game* game_inst) {  // this error does not seem to actuall
 }
 
 b8 application_run() {
+    // start the clock for the app
+    clock_start(&app_state.clock);                  // start the clock for the app state
+    clock_update(&app_state.clock);                 // update the clock for the app state - update the elapsed time
+    app_state.last_time = app_state.clock.elapsed;  // set last time to the elapsed time
+    f64 running_time = 0;                           // declare with 0 - to keep track of how much time has accumulated
+    u8 frame_count = 0;                             // declare with 0 - to keep track of the frames per second
+    f64 target_frame_seconds = 1.0f / 60;           // target frame rate of 60 frames per second - so this gives us a 60th of a second 1/60s - for places where the frame rate may need to be limited
+
     // test of the memory subsystem
     KINFO(get_memory_usage_str())
     // this is basically the "game" loop at the moment will run as long as app state remains true
@@ -97,21 +115,55 @@ b8 application_run() {
         }
 
         if (!app_state.is_suspended) {
-            if (!app_state.game_inst->update(app_state.game_inst, (f32)0)) {  // run the update routine. the zero is in polace of delta time for now, will be fixed later
+            // update clock and get delta time
+            clock_update(&app_state.clock);                       // update the elapsed time
+            f64 current_time = app_state.clock.elapsed;           // grab the clocks current elapsed time
+            f64 delta = (current_time - app_state.last_time);     // create delta by taking the current time and subtracting from it the last time
+            f64 frame_start_time = platform_get_absolute_time();  // get the time from the os and set it to frame start time - to keep track of how long each frame takes to render
+
+            if (!app_state.game_inst->update(app_state.game_inst, (f32)delta)) {  // run the update routine. the zero is in polace of delta time for now, will be fixed later
                 KFATAL("Game update failed, shutting down.");
                 app_state.is_running = FALSE;  // shut down the application layer
                 break;
             }
 
             // call the games render routine
-            if (!app_state.game_inst->render(app_state.game_inst, (f32)0)) {  // again the zero is in place of delta time
+            if (!app_state.game_inst->render(app_state.game_inst, (f32)delta)) {  // again the zero is in place of delta time
                 KFATAL("Game renderer failed, shutting down");
                 app_state.is_running = FALSE;
                 break;
             }
+
+            // this is not how this will be done in the future
+            // TODO: refactor packet creation
+            render_packet packet;
+            packet.delta_time = delta;
+            renderer_draw_frame(&packet);  // here is where the draw calls are going to be?
+
+            // figure out how long the frame took and, if below
+            f64 frame_end_time = platform_get_absolute_time();                  // get time from os and set to frame end time
+            f64 frame_elapsed_time = frame_end_time - frame_start_time;         // get the elapsed time from the start and end times
+            running_time += frame_elapsed_time;                                 // increment the running time by the frame elapsed time
+            f64 remaining_seconds = target_frame_seconds - frame_elapsed_time;  // take the elapsed time away from one second
+
+            if (remaining_seconds > 0) {                        // if there are still ms left
+                u64 remaining_ms = (remaining_seconds * 1000);  // conver to ms
+
+                // if there is time left, give it back to the os - helps with performance
+                b8 limit_frames = FALSE;  // a switch for enabling the below statement
+                if (remaining_ms > 0 && limit_frames) {
+                    platform_sleep(remaining_ms - 1);
+                }
+
+                frame_count++;  // increment the frame count
+            }
+
             // NOTE: input update/state copying should always be handled after any input should be recorder, i.e. before this line
             // as a safety, input is the last thing to be updated before this frame ends
-            input_update(0);
+            input_update(delta);
+
+            // update last time
+            app_state.last_time = current_time;  // at the very end set last time to the current time
         }
     }
 
@@ -125,30 +177,32 @@ b8 application_run() {
     event_shutdown();  // shutdown the event system
     input_shutdown();  // shutdown the input system
 
+    renderer_shutdown();  // shutdown the renderer
+
     platform_shutdown(&app_state.platform);  // shut down the platform layer
 
     return TRUE;
 }
 
 b8 application_on_event(u16 code, void* sender, void* listener_inst, event_context context) {
-    switch (code) { // chaeck to see what code was passed
-        case EVENT_CODE_APPLICATION_QUIT: { // if code is app quit
+    switch (code) {                          // chaeck to see what code was passed
+        case EVENT_CODE_APPLICATION_QUIT: {  // if code is app quit
             KINFO("EVENT_CODE_APPLICATION_QUIT recieved, shutting down.\n");
-            app_state.is_running = FALSE; // switch off the app
-            return TRUE; // blocks the app quit from going anywhere else
-        } 
+            app_state.is_running = FALSE;  // switch off the app
+            return TRUE;                   // blocks the app quit from going anywhere else
+        }
     }
 
-    return FALSE; // if the code not in the list
+    return FALSE;  // if the code not in the list
 }
 
-b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context){
-    if (code == EVENT_CODE_KEY_PRESSED) { // was it a key press
-        u16 key_code = context.data.u16[0]; // set key code to the key data in context
-        if (key_code == KEY_ESCAPE) { // if the key is esc
+b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context) {
+    if (code == EVENT_CODE_KEY_PRESSED) {    // was it a key press
+        u16 key_code = context.data.u16[0];  // set key code to the key data in context
+        if (key_code == KEY_ESCAPE) {        // if the key is esc
             // NOTE: technically firing an event to itself, but eventually there may be other listeners
-            event_context data = {}; // create empty context, data
-            event_fire(EVENT_CODE_APPLICATION_QUIT, 0, data); // fire the event
+            event_context data = {};                           // create empty context, data
+            event_fire(EVENT_CODE_APPLICATION_QUIT, 0, data);  // fire the event
 
             // block anything else from processing this
             return TRUE;
@@ -156,7 +210,7 @@ b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context
             // example on checking for a key
             KDEBUG("Explicit - A key pressed!");
         } else {
-            KDEBUG("'%c' key pressed in window.", key_code); // if a wasnt pressed, what was pressed
+            KDEBUG("'%c' key pressed in window.", key_code);  // if a wasnt pressed, what was pressed
         }
     } else if (code == EVENT_CODE_KEY_RELEASED) {
         u16 key_code = context.data.u16[0];
@@ -164,7 +218,7 @@ b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context
             // example for checking for a key
             KDEBUG("Explicit - B key released!");
         } else {
-            KDEBUG("'%c' key released in window.", key_code); // if b wasnt released, what was
+            KDEBUG("'%c' key released in window.", key_code);  // if b wasnt released, what was
         }
     }
     return FALSE;
