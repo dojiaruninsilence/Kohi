@@ -8,6 +8,8 @@
 #include "core/logger.h"
 #include "core/input.h"
 
+#include "containers/darray.h"
+
 // specific include for the win32 platform
 #include <windows.h>
 #include <windowsx.h>  // param input extraction - parameter
@@ -207,6 +209,11 @@ f64 platform_get_absolute_time() {
     return (f64)now_time.QuadPart * clock_frequency;  //  number of cycles dince the application started times the speed of the processor gives us actual time passed and returns that value
 }
 
+// from vulcan_platform.h -- to get the platform specific extesion names for windows
+void platform_get_required_extension_names(const char ***names_darray) {
+    darray_push(*names_darray, &"VK_KHR_win32_surface");  // push in the windows surface extension into the vulkan required estensions array
+}
+
 // not much to do on this for now
 void platform_sleep(u64 ms) {
     Sleep(ms);
@@ -239,25 +246,25 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
         case WM_KEYUP:
         case WM_SYSKEYUP: {  // commented out for now because dont have input management yet
             // key pressed or released
-            b8 pressed = (msg == WM_KEYDOWN || msg ==  WM_SYSKEYDOWN); // if either of these is true, then we are calling pressed true
-            keys key = (u16)w_param;  // get the key code from w_param which contains the u16 key code
+            b8 pressed = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);  // if either of these is true, then we are calling pressed true
+            keys key = (u16)w_param;                                   // get the key code from w_param which contains the u16 key code
 
             // pass to the input subsystem for processing
             input_process_key(key, pressed);
         } break;
         case WM_MOUSEMOVE: {  // commented out for now because dont have input management yet
             // mouse move -- uses macros provided by windows to get the mouse posistion - l_param is a single interger with both x and y coords packed into it
-            i32 x_position = GET_X_LPARAM(l_param); // gets the x coord form the int
-            i32 y_position = GET_Y_LPARAM(l_param); // gets the y coord form the int
-            
+            i32 x_position = GET_X_LPARAM(l_param);  // gets the x coord form the int
+            i32 y_position = GET_Y_LPARAM(l_param);  // gets the y coord form the int
+
             // pass to the input subsystem
             input_process_mouse_move(x_position, y_position);
         } break;
-        case WM_MOUSEWHEEL: {  // commented out for now because dont have input management yet
-            i32 z_delta = GET_WHEEL_DELTA_WPARAM(   w_param); // pull the z-delta from the w_param
-            if (z_delta != 0) { // if it isnt zero
+        case WM_MOUSEWHEEL: {                               // commented out for now because dont have input management yet
+            i32 z_delta = GET_WHEEL_DELTA_WPARAM(w_param);  // pull the z-delta from the w_param
+            if (z_delta != 0) {                             // if it isnt zero
                 // flatten the input to an OS independent (-1, 1) -- windows provides strange values for the scroll wheel
-                z_delta = (z_delta < 0) ? -1 : 1; // if the delta is less than zero it becomes simply -1, and if it isnt, it simply becomes 1
+                z_delta = (z_delta < 0) ? -1 : 1;  // if the delta is less than zero it becomes simply -1, and if it isnt, it simply becomes 1
             }
 
             // pass to the input subsystem
@@ -268,26 +275,26 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
         case WM_RBUTTONDOWN:
         case WM_LBUTTONUP:
         case WM_MBUTTONUP:
-        case WM_RBUTTONUP: {  // commented out for now because dont have input management yet
-            b8 pressed = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN; // pressed is true, if any of these are true
+        case WM_RBUTTONUP: {                                                                       // commented out for now because dont have input management yet
+            b8 pressed = msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN || msg == WM_MBUTTONDOWN;  // pressed is true, if any of these are true
             buttons mouse_button = BUTTON_MAX_BUTTONS;
             switch (msg) {
-            case WM_LBUTTONDOWN:
-            case WM_LBUTTONUP:
-                mouse_button = BUTTON_LEFT;
-                break;
-            case WM_MBUTTONDOWN:
-            case WM_MBUTTONUP:
-                mouse_button = BUTTON_MIDDLE;
-                break;
-            case WM_RBUTTONDOWN:
-            case WM_RBUTTONUP:
-                mouse_button = BUTTON_RIGHT;
-                break;
+                case WM_LBUTTONDOWN:
+                case WM_LBUTTONUP:
+                    mouse_button = BUTTON_LEFT;
+                    break;
+                case WM_MBUTTONDOWN:
+                case WM_MBUTTONUP:
+                    mouse_button = BUTTON_MIDDLE;
+                    break;
+                case WM_RBUTTONDOWN:
+                case WM_RBUTTONUP:
+                    mouse_button = BUTTON_RIGHT;
+                    break;
             }
 
-            // pass to the input subsystem 
-            if (mouse_button != BUTTON_MAX_BUTTONS) { // this is a check to make sure it triggered one of the cases
+            // pass to the input subsystem
+            if (mouse_button != BUTTON_MAX_BUTTONS) {  // this is a check to make sure it triggered one of the cases
                 input_process_button(mouse_button, pressed);
             }
         } break;

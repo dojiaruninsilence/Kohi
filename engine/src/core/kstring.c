@@ -13,3 +13,8 @@ char* string_duplicate(const char* str) {
     kcopy_memory(copy, str, length + 1);
     return copy;
 }
+
+// case sensitive string comparison. true if they are the same otherwise its false
+b8 strings_equal(const char* str0, const char* str1) {
+    return strcmp(str0, str1) == 0;  // gonna utilize the c library command to compare strings for now
+}
