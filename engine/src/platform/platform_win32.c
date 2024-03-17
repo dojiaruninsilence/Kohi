@@ -15,10 +15,16 @@
 #include <windowsx.h>  // param input extraction - parameter
 #include <stdlib.h>    // temporary
 
+// for surface creation
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_win32.h>
+#include "renderer/vulkan/vulkan_types.inl"
+
 // windows specific state
 typedef struct internal_state {
     HINSTANCE h_instance;  // handle to the instance of the application
     HWND hwnd;             // handle to the window
+    VkSurfaceKHR surface;  // vulkan needs a surface to render to. add it to the windows internal state. surface will be retrieved from the windowing system
 } internal_state;
 
 // clock
@@ -209,15 +215,34 @@ f64 platform_get_absolute_time() {
     return (f64)now_time.QuadPart * clock_frequency;  //  number of cycles dince the application started times the speed of the processor gives us actual time passed and returns that value
 }
 
+// not much to do on this for now
+void platform_sleep(u64 ms) {
+    Sleep(ms);
+}
+
 // from vulcan_platform.h -- to get the platform specific extesion names for windows
 void platform_get_required_extension_names(const char ***names_darray) {
     darray_push(*names_darray, &"VK_KHR_win32_surface");  // push in the windows surface extension into the vulkan required estensions array
 }
 
-// not much to do on this for now
-void platform_sleep(u64 ms) {
-    Sleep(ms);
-}
+// surface creation for vulkan -- exposes too much vulkan code to the platform, but going to use for now, will probably change
+b8 platform_create_vulkan_surface(platform_state *plat_state, vulkan_context *context) {
+    // Simply cold-cast to the known type.
+    internal_state *state = (internal_state *)plat_state->internal_state;
+
+    VkWin32SurfaceCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};  // create the info needed to create the new surface
+    create_info.hinstance = state->h_instance;                                                    // input a poiter to handel instance into surface info
+    create_info.hwnd = state->hwnd;                                                               // input a pointer to the window handle into surface info
+
+    VkResult result = vkCreateWin32SurfaceKHR(context->instance, &create_info, context->allocator, &state->surface);  // create the window surface using the surface info and allocate memory and store results in result
+    if (result != VK_SUCCESS) {                                                                                       // if it succeeded
+        KFATAL("Vulkan surface creation failed.");
+        return FALSE;
+    }
+
+    context->surface = state->surface;
+    return TRUE;
+}  // this is where i left off, the video is at -----------------> 7 49<----------------------------- video #015
 
 // need to learn more about these switch statements - it seems that once they are triggere they just keep moving til they find the first line of code, even if its 3 cases down
 // handle events coming in -- need to look at the microsoft documentation on this as well, look for window messages and such
