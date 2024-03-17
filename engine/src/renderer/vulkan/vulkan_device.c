@@ -43,10 +43,139 @@ b8 vulkan_device_create(vulkan_context* context) {
         return FALSE;
     }
 
+    KINFO("Creating logical device...");
+    // NOTE: for the time being we do not want to create additional queues for shared indices
+    b8 present_shares_graphics_queue = context->device.graphics_queue_index == context->device.present_queue_index;    // if present shares the same queue as graphics, use the same queue
+    b8 transfer_shares_graphics_queue = context->device.graphics_queue_index == context->device.transfer_queue_index;  // if transfer shares the same queue as graphics, use the same queue
+    u32 index_count = 1;                                                                                               // keep track of the total indices, there has to be at least one
+    if (!present_shares_graphics_queue) {                                                                              // if present has a different queue
+        index_count++;                                                                                                 // inrcrement the index count
+    }                                                                                                                  //
+    if (!transfer_shares_graphics_queue) {                                                                             // if transfer has a different queue
+        index_count++;                                                                                                 // inrcrement the index count
+    }                                                                                                                  //
+    u32 indices[index_count];                                                                                          // create an array of indices the size of the index count
+    u8 index = 0;                                                                                                      // start at index zero
+    indices[index++] = context->device.graphics_queue_index;                                                           // first element in the array will be the graphics queue index, increment index
+    if (!present_shares_graphics_queue) {                                                                              // if present doesnt share the same queue as graphics
+        indices[index++] = context->device.present_queue_index;                                                        // second element in the array will be the present queue index, increment index
+    }                                                                                                                  //
+    if (!transfer_shares_graphics_queue) {                                                                             // if transfer doesnt share the same queue as graphics
+        indices[index++] = context->device.transfer_queue_index;                                                       // second or third element in array will be the transfer queue index, increment index
+    }
+
+    // need to look all of this stuff up
+    VkDeviceQueueCreateInfo queue_create_infos[index_count];                       // vulkan function for creating an array of queue create information with an amount of the index count
+    for (u32 i = 0; i < index_count; ++i) {                                        // iterate through all of the queues and set the create infos
+        queue_create_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;  // set the stype, he doesnt really talk about so look up
+        queue_create_infos[i].queueFamilyIndex = indices[i];                       // set the queue family index to index i
+        queue_create_infos[i].queueCount = 1;                                      // hard code for now may need to be more flexible in the future
+        if (indices[i] == context->device.graphics_queue_index) {                  // on the qraphics queue
+            queue_create_infos[i].queueCount = 2;                                  // set the queue count to 2
+        }                                                                          //
+        queue_create_infos[i].flags = 0;                                           // zerod out for now
+        queue_create_infos[i].pNext = 0;                                           // zerod out for now
+        f32 queue_priority = 1.0f;                                                 // this is the default value for now
+        queue_create_infos[i].pQueuePriorities = &queue_priority;                  // set the queue priority here. will come back to this later
+    }
+
+    // request device feature
+    // TODO: should be config driven
+    VkPhysicalDeviceFeatures device_features = {};  // request for device features and set it empty
+    device_features.samplerAnisotropy = VK_TRUE;    // request anisotropy
+
+    VkDeviceCreateInfo device_create_info = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};  // zero out device create info and pass in vulkan device create info
+    device_create_info.queueCreateInfoCount = index_count;                           // set the queue create info count to the index count
+    device_create_info.pQueueCreateInfos = queue_create_infos;                       // set the queue create infos
+    device_create_info.pEnabledFeatures = &device_features;                          // set the enabled features to the device features
+    device_create_info.enabledExtensionCount = 1;                                    // hard code the extension count to 1 for now
+    const char* extensions_names = VK_KHR_SWAPCHAIN_EXTENSION_NAME;                  // the only extension we are going to load for now is the vk khr swapchain extension name
+    device_create_info.ppEnabledExtensionNames = &extensions_names;                  // set the extension names
+
+    // deprecated and ignored, so pass nothing
+    device_create_info.enabledLayerCount = 0;
+    device_create_info.ppEnabledLayerNames = 0;
+
+    // create the device
+    VK_CHECK(vkCreateDevice(                // call the create device and check against vh_check
+        context->device.physical_device,    // pass in the vulkan physical device
+        &device_create_info,                // pass in the device create info
+        context->allocator,                 // pass in the memory allocation info
+        &context->device.logical_device));  // and the logical device we are creating - a pointer we are storing for the device in vulkan device
+
+    KINFO("Logical device created.");
+
+    // queue arent created they are a part of the hardware -- this is us getting a handle to those so we can make use of them
+    // get queues
+    // graphics queue
+    vkGetDeviceQueue(
+        context->device.logical_device,        // pass in the logical device
+        context->device.graphics_queue_index,  // pass in the graphics queue index
+        0,                                     // hard coding the queue index to zero because graphics is the first in the index- probably going to change
+        &context->device.graphics_queue);      // and a pointer to the graphics queue
+
+    // present queue
+    vkGetDeviceQueue(
+        context->device.logical_device,       // pass in the logical device
+        context->device.present_queue_index,  // pass in the present queue index
+        0,                                    // hard coding the queue index to zero because graphics is the first in the index- probably going to change
+        &context->device.present_queue);      // and a pointer to the present queue
+
+    // transfer queue
+    vkGetDeviceQueue(
+        context->device.logical_device,        // pass in the logical device
+        context->device.transfer_queue_index,  // pass in the transfer queue index
+        0,                                     // hard coding the queue index to zero because graphics is the first in the index- probably going to change
+        &context->device.transfer_queue);      // and a pointer to the transfer queue
+    KINFO("Queues obtained.");
+
     return TRUE;
 }
 
 void vulkan_device_destroy(vulkan_context* context) {
+    // unset the queues - release the data for them
+    context->device.graphics_queue = 0;
+    context->device.present_queue = 0;
+    context->device.transfer_queue = 0;
+
+    // destroy the logical device
+    KINFO("Destroying logical device...");
+    if (context->device.logical_device) {                                     // if there is a logical device
+        vkDestroyDevice(context->device.logical_device, context->allocator);  // use vulkan function to destroy the device, pass in the logical device and the memory allocation info
+        context->device.logical_device = 0;                                   // set logical device to zero
+    }
+    // physical devices are not destroyed
+    KINFO("Releasing physical device resources...");
+    context->device.physical_device = 0;  // release the info for the physical device
+
+    if (context->device.swapchain_support.formats) {                                      // if there is data in the swapchain support formats
+        kfree(                                                                            // free it
+            context->device.swapchain_support.formats,                                    // pass in the formats
+            sizeof(VkSurfaceFormatKHR) * context->device.swapchain_support.format_count,  // and the size of the formats times the number of them
+            MEMORY_TAG_RENDERER);                                                         // and the renederer memory tag
+        context->device.swapchain_support.formats = 0;                                    // and reset the formats array
+        context->device.swapchain_support.format_count = 0;                               // and the format count
+    }
+
+    // do the same thing for the present modes
+    if (context->device.swapchain_support.present_modes) {                                    // if there is data in the swapchain support present modes
+        kfree(                                                                                // free it
+            context->device.swapchain_support.present_modes,                                  // pass in the present modes
+            sizeof(VkPresentModeKHR) * context->device.swapchain_support.present_mode_count,  // and the size of the present modes times the number of them
+            MEMORY_TAG_RENDERER);                                                             // and the renederer memory tag
+        context->device.swapchain_support.present_modes = 0;                                  // and reset the present modes array
+        context->device.swapchain_support.present_mode_count = 0;                             // and the present modes count
+    }
+
+    // reset the swapchain support data
+    kzero_memory(
+        &context->device.swapchain_support.capabilities,
+        sizeof(context->device.swapchain_support.capabilities));
+
+    // reset all of the queue family indices
+    context->device.graphics_queue_index = -1;
+    context->device.present_queue_index = -1;
+    context->device.transfer_queue_index = -1;
 }
 
 void vulkan_device_query_swapchain_support(
