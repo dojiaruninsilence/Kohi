@@ -7,6 +7,7 @@
 
 #include "core/logger.h"
 #include "core/input.h"
+#include "core/event.h"
 
 #include "containers/darray.h"
 
@@ -253,7 +254,9 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
             return 1;  // in documentation says to return 1
         case WM_CLOSE:
             // TODO:  fire an event for the application to quit -- come back after the event system has been built
-            return 0;
+            event_context data = {};                           // create empty event context call it data
+            event_fire(EVENT_CODE_APPLICATION_QUIT, 0, data);  // fire event with code application quit, leave the sender field empty and pass in the data
+            return TRUE;
         case WM_DESTROY:
             PostQuitMessage(0);  // when window is destroyed you have to post a quit message -- posts WM_QUIT
             return 0;
