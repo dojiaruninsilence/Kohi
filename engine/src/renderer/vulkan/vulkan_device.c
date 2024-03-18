@@ -70,13 +70,14 @@ b8 vulkan_device_create(vulkan_context* context) {
         queue_create_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;  // set the stype, he doesnt really talk about so look up
         queue_create_infos[i].queueFamilyIndex = indices[i];                       // set the queue family index to index i
         queue_create_infos[i].queueCount = 1;                                      // hard code for now may need to be more flexible in the future
-        if (indices[i] == context->device.graphics_queue_index) {                  // on the qraphics queue
-            queue_create_infos[i].queueCount = 2;                                  // set the queue count to 2
-        }                                                                          //
-        queue_create_infos[i].flags = 0;                                           // zerod out for now
-        queue_create_infos[i].pNext = 0;                                           // zerod out for now
-        f32 queue_priority = 1.0f;                                                 // this is the default value for now
-        queue_create_infos[i].pQueuePriorities = &queue_priority;                  // set the queue priority here. will come back to this later
+        // TODO: enable this for future enhancement
+        // if (indices[i] == context->device.graphics_queue_index) {                  // on the qraphics queue
+        //     queue_create_infos[i].queueCount = 2;                                  // set the queue count to 2
+        // }                                                                          //
+        queue_create_infos[i].flags = 0;                           // zerod out for now
+        queue_create_infos[i].pNext = 0;                           // zerod out for now
+        f32 queue_priority = 1.0f;                                 // this is the default value for now
+        queue_create_infos[i].pQueuePriorities = &queue_priority;  // set the queue priority here. will come back to this later
     }
 
     // request device feature
@@ -224,6 +225,33 @@ void vulkan_device_query_swapchain_support(
             &out_support_info->present_mode_count,           // pass in a pointer to the present mode count
             out_support_info->present_modes));               // and the present modes array to fill in
     }
+}
+
+// used to get the depth format, pass in a vulkan device -- detects the image format that is required by our depth buffer - returns true if it is the correct format
+b8 vulkan_device_detect_depth_format(vulkan_device* device) {
+    // format candidates - determine the requirements
+    const u64 candidate_count = 3;                           // set how many are available
+    VkFormat candidates[3] = {                               // create an array of candidates, with higher want value at the top - in order of preferation
+                              VK_FORMAT_D32_SFLOAT,          // one component, 32 bit signed floating point format that has 32 bit in the depth component
+                              VK_FORMAT_D32_SFLOAT_S8_UINT,  // 2 component format, 32 signed float bits in the depth component, and 8 unsigned int bits in the stencil component, optionally 24 unused bits
+                              VK_FORMAT_D24_UNORM_S8_UINT};  // 2 component format, 32 bit packed format, 8 unsigned int bits in stencil component, and 24 unsigned normalized bits in the depth component
+
+    u32 flags = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;                                    // is a usage on how were going to use the image - depth and stencil buffers are combined
+    for (u32 i = 0; i < candidate_count; ++i) {                                                    // iterate through the candidates
+        VkFormatProperties properties;                                                             // create a vulkan format properties
+        vkGetPhysicalDeviceFormatProperties(device->physical_device, candidates[i], &properties);  // use a function to get the device properties, pass in the physical device, canidates[i], and properties adress - check if it has the property we are looking for
+
+        if ((properties.linearTilingFeatures & flags) == flags) {  // if it passes either of these checks, use this candidate for the depth buffer
+            device->depth_format = candidates[i];
+            return TRUE;
+        } else if ((properties.optimalTilingFeatures & flags) == flags) {
+            device->depth_format = candidates[i];
+            return TRUE;
+        }
+    }
+
+    // if it fails both checks
+    return FALSE;
 }
 
 b8 select_physical_device(vulkan_context* context) {

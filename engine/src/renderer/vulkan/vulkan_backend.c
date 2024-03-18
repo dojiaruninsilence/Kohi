@@ -3,6 +3,7 @@
 #include "vulkan_types.inl"
 #include "vulkan_platform.h"
 #include "vulkan_device.h"
+#include "vulkan_swapchain.h"
 
 #include "core/logger.h"
 #include "core/kstring.h"
@@ -21,7 +22,13 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data,  // the message
     void* user_data);                                           // could contain the name of the application or wherever it is running from
 
+// foreward declaration
+i32 find_memory_index(u32 type_filter, u32 property_flags);
+
 b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* application_name, struct platform_state* plat_state) {
+    // function pointers
+    context.find_memory_index = find_memory_index;
+
     // TODO: custom allocator
     context.allocator = 0;  // zero out the custom allocator
 
@@ -133,11 +140,34 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
         return FALSE;
     }
 
+    // vulkan swapchain creation
+    vulkan_swapchain_create(
+        &context,
+        context.framebuffer_width,
+        context.framebuffer_height,
+        &context.swapchain);
+
     KINFO("Vulkan renderer initialized successfully.");
     return TRUE;
 }
 
 void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
+    // destroy in the opposite order of creation
+
+    // destroy the swapchain
+    vulkan_swapchain_destroy(&context, &context.swapchain);
+
+    // destroy the vulkan device
+    KDEBUG("Destroying Vulkan Device...");
+    vulkan_device_destroy(&context);
+
+    // destroy the vulkan surface
+    KDEBUG("Destroying Vulkan surface...");
+    if (context.surface) {                                                          // if there is a surface
+        vkDestroySurfaceKHR(context.instance, context.surface, context.allocator);  // destroy the vulkan surface utilizing a vulkan function
+        context.surface = 0;                                                        // set the surface to zero
+    }
+
     KDEBUG("Destroying Vulkan debugger...");
     if (context.debug_messenger) {                                                                                                                                   // check that it exists
         PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(context.instance, "vkDestroyDebugUtilsMessengerEXT");  // get a function pointer to destroy debug messenger ext func
@@ -180,4 +210,19 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
             break;
     }
     return VK_FALSE;  // this function is always supposed to return false
+}
+
+i32 find_memory_index(u32 type_filter, u32 property_flags) {
+    VkPhysicalDeviceMemoryProperties memory_properties;                                       // create a memory properties struct
+    vkGetPhysicalDeviceMemoryProperties(context.device.physical_device, &memory_properties);  // get the memory properties from the devie and fill into the struct
+
+    for (u32 i = 0; i < memory_properties.memoryTypeCount; ++i) {  // iterate through the memory types
+        // check each memory type to see if its bit is set to 1
+        if (type_filter & (1 << i) && (memory_properties.memoryTypes[i].propertyFlags & property_flags) == property_flags) {  // checks to see if they match the flags that we passed in
+            return i;
+        }
+    }
+
+    KWARN("Unable to find suitable memory type!");
+    return -1;
 }
