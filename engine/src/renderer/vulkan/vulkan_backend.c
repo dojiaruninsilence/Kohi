@@ -5,9 +5,11 @@
 #include "vulkan_device.h"
 #include "vulkan_swapchain.h"
 #include "vulkan_renderpass.h"
+#include "vulkan_command_buffer.h"
 
 #include "core/logger.h"
 #include "core/kstring.h"
+#include "core/kmemory.h"
 
 #include "containers/darray.h"
 
@@ -25,6 +27,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
 
 // foreward declaration
 i32 find_memory_index(u32 type_filter, u32 property_flags);
+
+void create_command_buffers(renderer_backend* backend);  // private function to create command buffers, just takes in the renderer backend
 
 b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* application_name, struct platform_state* plat_state) {
     // function pointers
@@ -133,7 +137,7 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
         KERROR("Failed to create platform surface!");             // let us know if it failed
         return FALSE;
     }
-    KDEBUG("Vulkan surface created.")
+    KDEBUG("Vulkan surface created.");
 
     // vulkan device creation
     if (!vulkan_device_create(&context)) {   // if it fails to create
@@ -157,6 +161,9 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
         1.0f,                                                         // pass in a depth
         0);                                                           // pass in a stencil
 
+    // create command buffers
+    create_command_buffers(backend);
+
     // everything passed
     KINFO("Vulkan renderer initialized successfully.");
     return TRUE;
@@ -164,6 +171,19 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
 
 void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
     // destroy in the opposite order of creation
+
+    // destroy the command buffers
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {  // iterate through all of the swapchain images
+        if (context.graphics_command_buffers[i].handle) {      // if a handle exists at index i
+            vulkan_command_buffer_free(                        // call our function to return the command buffer to the command pool
+                &context,                                      // takes in an address to the context
+                context.device.graphics_command_pool,          // takes in the pool the command buffer belongs to
+                &context.graphics_command_buffers[i]);         // and the command buffer at index i
+            context.graphics_command_buffers[i].handle = 0;    // set the hendle at index i to zero
+        }
+    }
+    darray_destroy(context.graphics_command_buffers);  // destroy the darray
+    context.graphics_command_buffers = 0;              // set the command buffers to zero
 
     // destroy the render pass
     vulkan_renderpass_destroy(&context, &context.main_renderpass);
@@ -182,12 +202,14 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
         context.surface = 0;                                                        // set the surface to zero
     }
 
+    // destroy the vulkan debugger
     KDEBUG("Destroying Vulkan debugger...");
     if (context.debug_messenger) {                                                                                                                                   // check that it exists
         PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(context.instance, "vkDestroyDebugUtilsMessengerEXT");  // get a function pointer to destroy debug messenger ext func
         func(context.instance, context.debug_messenger, context.allocator);                                                                                          // then call the function
     }
 
+    // destroy the vulkan debugger
     KDEBUG("Destroying Vulkan instance...");
     vkDestroyInstance(context.instance, context.allocator);  // use vulkan function to destroy the instance
 }
@@ -239,4 +261,31 @@ i32 find_memory_index(u32 type_filter, u32 property_flags) {
 
     KWARN("Unable to find suitable memory type!");
     return -1;
+}
+
+void create_command_buffers(renderer_backend* backend) {  // private function to create command buffers, just takes in the renderer backend
+    // need to create a command buffer for each of our swapchain images - because we do things in the swapchain asyncronously
+    if (!context.graphics_command_buffers) {                                                                      // if there is nothing stored in graphics command buffers
+        context.graphics_command_buffers = darray_reserve(vulkan_command_buffer, context.swapchain.image_count);  // create a darray and reserve a block of memory for and array of vulkan command buffers numbering the amount of images in the swapchain
+        for (u32 i = 0; i < context.swapchain.image_count; ++i) {                                                 // iterate through all of the swapchain images
+            kzero_memory(&context.graphics_command_buffers[i], sizeof(vulkan_command_buffer));                    // zero out the memory in the alloted block at each of indices for the command buffers
+        }
+    }
+
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {  // iterate through all of the swapchain images
+        if (context.graphics_command_buffers[i].handle) {      // if there is a command buffer at the index i
+            vulkan_command_buffer_free(                        // call our vulkan command buffer free function
+                &context,                                      // pass in an address to the context
+                context.device.graphics_command_pool,          // pass in the graphics command pool for th epool
+                &context.graphics_command_buffers[i]);         // and freeing command buffer at index i
+        }
+        kzero_memory(&context.graphics_command_buffers[i], sizeof(vulkan_command_buffer));  // zero out the memory for command buffer i
+        vulkan_command_buffer_allocate(                                                     // call our vulkan command buffer allocat function
+            &context,                                                                       // passs in an adress to the context
+            context.device.graphics_command_pool,                                           // pass in the graphics pool for the pool
+            TRUE,                                                                           // set primary to true
+            &context.graphics_command_buffers[i]);                                          // and and address to the command buffer being allocated
+    }
+
+    KINFO("Vulkan surface created.");
 }

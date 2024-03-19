@@ -32,6 +32,8 @@ typedef struct vulkan_device {
     VkQueue present_queue;   // handle to the present queue
     VkQueue transfer_queue;  // handle to the transfer queue
 
+    VkCommandPool graphics_command_pool;  // handle to the vulkan graphics command pool
+
     VkPhysicalDeviceProperties properties;
     VkPhysicalDeviceFeatures features;
     VkPhysicalDeviceMemoryProperties memory;
@@ -82,13 +84,13 @@ typedef struct vulkan_swapchain {
     vulkan_image depth_attachment;  // where to store the info for the depth image
 } vulkan_swapchain;
 
-// an enumeration of all the vulkan command buffer states
+// an enumeration of all the vulkan command buffer states - these are actually changed within vulkan, but we need to keep track of them for the application
 typedef enum vulkan_command_buffer_state {
     COMMAND_BUFFER_STATE_READY,            // ready to begin
-    COMMAND_BUFFER_STATE_RECORDING,        // need to come back to
-    COMMAND_BUFFER_STATE_IN_RENDER_PASS,   // in a render pass
-    COMMAND_BUFFER_STATE_RECORDING_ENDED,  // not in a render pass anymore
-    COMMAND_BUFFER_STATE_SUBMITTED,        // render pass submitted and ready for execution
+    COMMAND_BUFFER_STATE_RECORDING,        // need to come back to - the point where it is able to start issuing commands
+    COMMAND_BUFFER_STATE_IN_RENDER_PASS,   // currently issuing commands
+    COMMAND_BUFFER_STATE_RECORDING_ENDED,  // not issuing commands anymore
+    COMMAND_BUFFER_STATE_SUBMITTED,        // execute all of the commands that are submitted
     COMMAND_BUFFER_STATE_NOT_ALLOCATED     // the default state - when it first starts
 } vulkan_command_buffer_state;
 
@@ -120,6 +122,9 @@ typedef struct vulkan_context {
 
     vulkan_swapchain swapchain;         // vulkan swapchain - controls images to be rendered to and presented, hold the images
     vulkan_renderpass main_renderpass;  // store the main vulkan render pass
+
+    // darray -- we are going to have a whole array of command buffers
+    vulkan_command_buffer* graphics_command_buffers;  // an array to store all of the graphics queue command buffers
 
     u32 image_index;    // to keep track of images in the swap chain - index of the image that we are currently using
     u32 current_frame;  // keep track of the frames

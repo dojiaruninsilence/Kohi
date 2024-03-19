@@ -130,6 +130,19 @@ b8 vulkan_device_create(vulkan_context* context) {
         &context->device.transfer_queue);      // and a pointer to the transfer queue
     KINFO("Queues obtained.");
 
+    // create a command pool for the graphics queue
+    VkCommandPoolCreateInfo pool_create_info = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};  // create the vulkan command pool create info struct and use the provided function to fill fields with default info
+    pool_create_info.queueFamilyIndex = context->device.graphics_queue_index;                 // pass graphics queue index into the queue family index - can only use it with this queue family, need to read more
+    pool_create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;                 // pass in the flag reset command buffer -- allows any command buffer allocated from it to be individually reset back to its initial state
+    VK_CHECK(vkCreateCommandPool(                                                             // run the vulkan function to create a command pool against vk check
+        context->device.logical_device,                                                       // pass it the logical device
+        &pool_create_info,                                                                    // the info struct we just made
+        context->allocator,                                                                   // the memory allocation stuffs
+        &context->device.graphics_command_pool));                                             // and an address to the graphics command pool that we are creating
+
+    // if the command pool is created successfully
+    KINFO("Graphics command pool created.")
+
     return TRUE;
 }
 
@@ -138,6 +151,13 @@ void vulkan_device_destroy(vulkan_context* context) {
     context->device.graphics_queue = 0;
     context->device.present_queue = 0;
     context->device.transfer_queue = 0;
+
+    // destroy the command pools
+    KINFO("Destroying command pools...");
+    vkDestroyCommandPool(                       // call the vulkan function to destroy command pool
+        context->device.logical_device,         // pass in the logical device
+        context->device.graphics_command_pool,  // the command pool to be destroyed
+        context->allocator);                    // and the memory allocator stuffs
 
     // destroy the logical device
     KINFO("Destroying logical device...");
