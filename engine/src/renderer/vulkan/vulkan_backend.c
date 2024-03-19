@@ -4,6 +4,7 @@
 #include "vulkan_platform.h"
 #include "vulkan_device.h"
 #include "vulkan_swapchain.h"
+#include "vulkan_renderpass.h"
 
 #include "core/logger.h"
 #include "core/kstring.h"
@@ -135,24 +136,37 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     KDEBUG("Vulkan surface created.")
 
     // vulkan device creation
-    if (!vulkan_device_create(&context)) {
-        KERROR("Failed to create device!");
-        return FALSE;
+    if (!vulkan_device_create(&context)) {   // if it fails to create
+        KERROR("Failed to create device!");  // trhow error
+        return FALSE;                        // boot out
     }
 
     // vulkan swapchain creation
     vulkan_swapchain_create(
-        &context,
-        context.framebuffer_width,
-        context.framebuffer_height,
-        &context.swapchain);
+        &context,                    // pass in address to the context
+        context.framebuffer_width,   // pass in a width
+        context.framebuffer_height,  // pass in a height
+        &context.swapchain);         // address to the swapchain being created
 
+    // vulkan renderpass creation
+    vulkan_renderpass_create(
+        &context,                                                     // pass in address to context
+        &context.main_renderpass,                                     // pass in the main renderpass
+        0, 0, context.framebuffer_width, context.framebuffer_height,  // pass in an x, y, width and height - render area
+        0.0f, 0.0f, 0.2f, 1.0f,                                       // pass in rgba values - clear color(dark blue)
+        1.0f,                                                         // pass in a depth
+        0);                                                           // pass in a stencil
+
+    // everything passed
     KINFO("Vulkan renderer initialized successfully.");
     return TRUE;
 }
 
 void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
     // destroy in the opposite order of creation
+
+    // destroy the render pass
+    vulkan_renderpass_destroy(&context, &context.main_renderpass);
 
     // destroy the swapchain
     vulkan_swapchain_destroy(&context, &context.swapchain);

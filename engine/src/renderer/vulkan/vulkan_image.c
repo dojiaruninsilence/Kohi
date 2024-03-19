@@ -50,7 +50,7 @@ void vulkan_image_create(
     }
 
     // allocate the memory
-    // VkMemoryAllocateInfo memory_allocate_info = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};  // create a memory allocate info stuct, using the vulkan macro to set it up -- changed from his code per the documentation
+    // VkMemoryAllocateInfo memory_allocate_info = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO};  // create a memory allocate info stuct, using the vulkan macro to set it up -- changed from his code per the documentation <-------------------------
     VkMemoryAllocateInfo memory_allocate_info = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};  // create a memory allocate info stuct, using the vulkan macro to set it up
     memory_allocate_info.allocationSize = memory_requirements.size;                        // allocation size set to the requires size
     memory_allocate_info.memoryTypeIndex = memory_type;                                    // memory type index set to memory type

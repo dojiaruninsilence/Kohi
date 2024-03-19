@@ -48,6 +48,28 @@ typedef struct vulkan_image {
     u32 height;             // stored for convinience
 } vulkan_image;
 
+// an enumeration of the different states that the renderpass can be in
+typedef enum vulkan_render_pass_state {
+    READY,            // ready to begin
+    RECORDING,        // need to come back to
+    IN_RENDER_PASS,   // in a render pass
+    RECORDING_ENDED,  // not in a render pass anymore
+    SUBMITTED,        // render pass submitted and ready for execution
+    NOT_ALLOCATED     // the default state - when it first starts
+} vulkan_render_pass_state;
+
+// where we will hold the data for the vulkan renderpass
+typedef struct vulkan_renderpass {
+    VkRenderPass handle;  // store the handle to the vulkan render pass
+    f32 x, y, w, h;       // store info for the render area for the renderpass
+    f32 r, g, b, a;       // store the info for the clear color for the renderpass
+
+    f32 depth;    // store the info for the renderpass depth
+    u32 stencil;  // need to look up, but has something to do with depth
+
+    vulkan_render_pass_state state;  // track the state of the vulkan render pass
+} vulkan_renderpass;
+
 // where we hold the data for the vulkan swapchain
 typedef struct vulkan_swapchain {
     VkSurfaceFormatKHR image_format;  // format for the images that we render too
@@ -59,6 +81,24 @@ typedef struct vulkan_swapchain {
 
     vulkan_image depth_attachment;  // where to store the info for the depth image
 } vulkan_swapchain;
+
+// an enumeration of all the vulkan command buffer states
+typedef enum vulkan_command_buffer_state {
+    COMMAND_BUFFER_STATE_READY,            // ready to begin
+    COMMAND_BUFFER_STATE_RECORDING,        // need to come back to
+    COMMAND_BUFFER_STATE_IN_RENDER_PASS,   // in a render pass
+    COMMAND_BUFFER_STATE_RECORDING_ENDED,  // not in a render pass anymore
+    COMMAND_BUFFER_STATE_SUBMITTED,        // render pass submitted and ready for execution
+    COMMAND_BUFFER_STATE_NOT_ALLOCATED     // the default state - when it first starts
+} vulkan_command_buffer_state;
+
+// where ww will be storing the info for the vulkan command buffer
+typedef struct vulkan_command_buffer {
+    VkCommandBuffer handle;  // store the handle to the command buffer
+
+    // command buffer state
+    vulkan_command_buffer_state state;  // keep track of the state of the command buffer
+} vulkan_command_buffer;
 
 // this is where we hold all of our static data for this renderer
 typedef struct vulkan_context {
@@ -78,9 +118,11 @@ typedef struct vulkan_context {
 
     vulkan_device device;  // include the device info in renderer data
 
-    vulkan_swapchain swapchain;  // vulkan swapchain - controls images to be rendered to and presented, hold the images
-    u32 image_index;             // to keep track of images in the swap chain - index of the image that we are currently using
-    u32 current_frame;           // keep track of the frames
+    vulkan_swapchain swapchain;         // vulkan swapchain - controls images to be rendered to and presented, hold the images
+    vulkan_renderpass main_renderpass;  // store the main vulkan render pass
+
+    u32 image_index;    // to keep track of images in the swap chain - index of the image that we are currently using
+    u32 current_frame;  // keep track of the frames
 
     b8 recreating_swapchain;  // a state that needs to be tracked in the render loop
 

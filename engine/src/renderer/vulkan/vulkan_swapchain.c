@@ -175,7 +175,7 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
         swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;             // define the image sharing mode as exclusive
         swapchain_create_info.queueFamilyIndexCount = 0;                                // define the queue family index count as 0
         swapchain_create_info.pQueueFamilyIndices = 0;                                  // and the indices at 0 as well
-    }
+    } 
 
     // final bit of the create info
     swapchain_create_info.preTransform = context->device.swapchain_support.capabilities.currentTransform;  // define the pretransform using swapchain cappabilities currenttransform - transform of image vs presentation - like portrait vs landscape as an example
@@ -218,7 +218,7 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
         view_info.subresourceRange.layerCount = 1;                                     // only going to have one array layer
 
         // call the vulkan function to create the views, pass in the logical device, the view info that we just filled out, the memory allocator, and the address for the swapchai view at index i
-        VK_CHECK(vkCreateImageView(context->device.logical_device, &view_info, context->allocator, &swapchain->views[i]))
+        VK_CHECK(vkCreateImageView(context->device.logical_device, &view_info, context->allocator, &swapchain->views[i]));
     }
 
     // need to create an image resource for the depth buffer
@@ -255,3 +255,5 @@ void destroy(vulkan_context* context, vulkan_swapchain* swapchain) {  // pass in
 
     vkDestroySwapchainKHR(context->device.logical_device, swapchain->handle, context->allocator);  // destroy the swapchain
 }
+
+
