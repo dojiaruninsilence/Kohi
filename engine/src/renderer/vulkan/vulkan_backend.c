@@ -6,10 +6,13 @@
 #include "vulkan_swapchain.h"
 #include "vulkan_renderpass.h"
 #include "vulkan_command_buffer.h"
+#include "vulkan_framebuffer.h"
+#include "vulkan_fence.h"
 
 #include "core/logger.h"
 #include "core/kstring.h"
 #include "core/kmemory.h"
+#include "core/application.h"
 
 #include "containers/darray.h"
 
@@ -17,6 +20,10 @@
 
 // create vulkan context - there will only be one
 static vulkan_context context;
+
+// static variables -- uses until we get a replacement value
+static u32 cached_framebuffer_width = 0;
+static u32 cached_framebuffer_height = 0;
 
 // foreward declaration
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
@@ -28,7 +35,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
 // foreward declaration
 i32 find_memory_index(u32 type_filter, u32 property_flags);
 
-void create_command_buffers(renderer_backend* backend);  // private function to create command buffers, just takes in the renderer backend
+void create_command_buffers(renderer_backend* backend);                                                               // private function to create command buffers, just takes in the renderer backend
+void regenerate_framebuffers(renderer_backend* backend, vulkan_swapchain* swapchain, vulkan_renderpass* renderpass);  // private function to create/regenerate framebuffers, pass in pointers to the backend, the swapchain, and the renderpass - going to hook all these together
 
 b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* application_name, struct platform_state* plat_state) {
     // function pointers
@@ -36,6 +44,15 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
 
     // TODO: custom allocator
     context.allocator = 0;  // zero out the custom allocator
+
+    // get the frame buffer size from the size stored in the app state - store the values in cached frame buffer width and height
+    application_get_framebuffer_size(&cached_framebuffer_width, &cached_framebuffer_height);
+    // check to make sure that the cached frambuffer size has actually been fillew out, other wise use default values
+    context.framebuffer_width = (cached_framebuffer_width != 0) ? cached_framebuffer_width : 800;     // if the cached frame buffer width is not zero then use it for the framebuffer width, otherwise use 800
+    context.framebuffer_height = (cached_framebuffer_height != 0) ? cached_framebuffer_height : 600;  // if the cached frame buffer height is not zero then use it for the framebuffer height, otherwise use 600
+    // reset the cached framebuffer size
+    cached_framebuffer_width = 0;
+    cached_framebuffer_height = 0;
 
     // setup the vulkan instance -- wnen ever you create an instance handle in vulkan there is creation info that has to go with it
     VkApplicationInfo app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};  // gives vulkan some info about the app itself
@@ -161,8 +178,37 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
         1.0f,                                                         // pass in a depth
         0);                                                           // pass in a stencil
 
+    // create swapchain frame buffers
+    context.swapchain.framebuffers = darray_reserve(vulkan_framebuffer, context.swapchain.image_count);  // create a swapchain framebuffer array and allocate memory for it using the size of a vulkan framebuffer times the swapchain image count
+    regenerate_framebuffers(backend, &context.swapchain, &context.main_renderpass);                      // call our private function regenerate framebuffers, pass in the backend, and addresses to the swapchain, and the main renderpass
+
     // create command buffers
     create_command_buffers(backend);
+
+    // create syncronization objects
+    context.image_available_semaphores = darray_reserve(VkSemaphore, context.swapchain.max_frames_in_flight);  // create a darray and allocated memory for image available semaphores. use the size of a vulkan semaphore times the max frames in flight in the swapchain
+    context.queue_complete_semaphores = darray_reserve(VkSemaphore, context.swapchain.max_frames_in_flight);   // create a darray and allocated memory for queue complete semaphores. use the size of a vulkan semaphore times the max frames in flight in the swapchain
+    context.in_flight_fences = darray_reserve(vulkan_fence, context.swapchain.max_frames_in_flight);           // create a darray and allocated memory for in flight fences. use the size of a vulkan fence times the max frames in flight in the swapchain
+
+    for (u8 i = 0; i < context.swapchain.max_frames_in_flight; ++i) {  // iterate through the max frames in flight
+        // create a vulkan semaphore create info struct, and use the provided macro to input default values into the fields
+        VkSemaphoreCreateInfo semaphore_create_info = {VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
+        // use the vulkan to create both image availabel semaphores and queue complete semaphores for image in flight at index i, pass in the logical device and the info created above, the memory allocation stuffs, and the address to the semaphore being created
+        vkCreateSemaphore(context.device.logical_device, &semaphore_create_info, context.allocator, &context.image_available_semaphores[i]);
+        vkCreateSemaphore(context.device.logical_device, &semaphore_create_info, context.allocator, &context.queue_complete_semaphores[i]);
+
+        // create the fence in  a signaled state, indicating that the first frame has already been "rendered". this will prevent the application from waiting indefinately for the first frame to render
+        // since it cannot be rendered until a frame is "rendered" before it
+        vulkan_fence_create(&context, TRUE, &context.in_flight_fences[i]);  // use our function to create a fence, pass in the address to the context, set to create in signaled state, fence at index i to be created
+    }
+
+    // create the in flight images
+    // in flight fences should not yet exist at this point, so clear the list. these are stored in pointers, because the initial state should be 0, and will be 0 when not in use
+    // Actual fences are not owned by this list
+    context.images_in_flight = darray_reserve(vulkan_fence, context.swapchain.image_count);  // create a darray and allocate memory for images in flight array, use the size of a vulkan fence times the number of images in the swap chain for the size
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {                                // iterate through the swapchain images
+        context.images_in_flight[i] = 0;                                                     // and make sure that all of the images in flight are zeroed out - nothing should be in flight jaust yet
+    }
 
     // everything passed
     KINFO("Vulkan renderer initialized successfully.");
@@ -170,7 +216,40 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
 }
 
 void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
+    // wait until the device is doing nothing at all
+    vkDeviceWaitIdle(context.device.logical_device);
+
     // destroy in the opposite order of creation
+
+    // destroy syncronization objects
+    for (u8 i = 0; i < context.swapchain.max_frames_in_flight; ++i) {  // iterate through all the max frames in flight
+        if (context.image_available_semaphores[i]) {                   // if there is a semaphore at index i
+            vkDestroySemaphore(                                        // call the vulkan function to destroy a semaphore
+                context.device.logical_device,                         // pass it the logical device
+                context.image_available_semaphores[i],                 // the semaphore to be destroyed
+                context.allocator);                                    // and the memory allocation stuffs
+            context.image_available_semaphores[i] = 0;                 // set index i to 0
+        }
+        if (context.queue_complete_semaphores[i]) {    // if there is a semaphore at index i
+            vkDestroySemaphore(                        // call the vulkan function to destroy a semaphore
+                context.device.logical_device,         // pass it the logical device
+                context.queue_complete_semaphores[i],  // the semaphore to be destroyed
+                context.allocator);                    // and the memory allocation stuffs
+            context.queue_complete_semaphores[i] = 0;  // set index i to 0
+        }
+        vulkan_fence_destroy(&context, &context.in_flight_fences[i]);  // use our function to destroy the fence at inde i, needs an address to the context, and an address to the fence being destroyed
+    }
+    darray_destroy(context.image_available_semaphores);  // destroy the image available semaphores darray and free the memory
+    context.image_available_semaphores = 0;              // set the value of the destroyed darray to 0
+
+    darray_destroy(context.queue_complete_semaphores);  // destroy the image available semaphores darray and free the memory
+    context.queue_complete_semaphores = 0;              // set the value of the destroyed darray to 0
+
+    darray_destroy(context.in_flight_fences);  // destroy the image available semaphores darray and free the memory
+    context.in_flight_fences = 0;              // set the value of the destroyed darray to 0
+
+    darray_destroy(context.images_in_flight);  // destroy the image available semaphores darray and free the memory
+    context.images_in_flight = 0;              // set the value of the destroyed darray to 0
 
     // destroy the command buffers
     for (u32 i = 0; i < context.swapchain.image_count; ++i) {  // iterate through all of the swapchain images
@@ -184,6 +263,11 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
     }
     darray_destroy(context.graphics_command_buffers);  // destroy the darray
     context.graphics_command_buffers = 0;              // set the command buffers to zero
+
+    // destroy the framebuffers
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {                      // iterate through the swapchain images
+        vulkan_framebuffer_destroy(&context, &context.swapchain.framebuffers[i]);  // use our function to destroy the framebuffer, pass in the address to the context, and the address to the frambuffer at index i
+    }
 
     // destroy the render pass
     vulkan_renderpass_destroy(&context, &context.main_renderpass);
@@ -288,4 +372,24 @@ void create_command_buffers(renderer_backend* backend) {  // private function to
     }
 
     KINFO("Vulkan surface created.");
+}
+
+// private function to create/regenerate framebuffers, pass in pointers to the backend, the swapchain, and the renderpass - going to hook all these together
+void regenerate_framebuffers(renderer_backend* backend, vulkan_swapchain* swapchain, vulkan_renderpass* renderpass) {
+    for (u32 i = 0; i < swapchain->image_count; ++i) {  // iterate through all the swap chain image count. - we need a framebuffer for each swapchain image
+        // TODO: make this dynamic based on the currently configured attachments
+        u32 attachment_count = 2;                                        // set attachment count to 2, for now
+        VkImageView attachments[] = {                                    // create a vulkan view attachments array
+                                     swapchain->views[i],                // pass in the swap chain view at index i
+                                     swapchain->depth_attachment.view};  // and the swapchain depth attachment view
+
+        vulkan_framebuffer_create(                // call our function to create a framebuffer
+            &context,                             // pass in an address to the context
+            renderpass,                           // pass through the renderpass
+            context.framebuffer_width,            // and the width
+            context.framebuffer_height,           // and height
+            attachment_count,                     // attachment counts defined above
+            attachments,                          // array created above
+            &context.swapchain.framebuffers[i]);  // address of the framebuffer being created at index i
+    }
 }

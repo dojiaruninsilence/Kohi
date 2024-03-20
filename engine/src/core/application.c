@@ -184,6 +184,12 @@ b8 application_run() {
     return TRUE;
 }
 
+// a way to pass the window size to the renderer, passes out a width and height
+void application_get_framebuffer_size(u32* width, u32* height) {
+    *width = app_state.width;    // pass the app state width to width
+    *height = app_state.height;  // pass the app state height to height
+}
+
 b8 application_on_event(u16 code, void* sender, void* listener_inst, event_context context) {
     switch (code) {                          // chaeck to see what code was passed
         case EVENT_CODE_APPLICATION_QUIT: {  // if code is app quit

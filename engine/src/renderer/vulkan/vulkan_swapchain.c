@@ -95,6 +95,9 @@ void vulkan_swapchain_present(
     } else if (result != VK_SUCCESS) {                                                                           // if it isnt successful
         KFATAL("Failed to present swap chain image!");                                                           // throw fatal error
     }
+
+    // increment and loop the index
+    context->current_frame = (context->current_frame + 1) % swapchain->max_frames_in_flight;  // increment the current frame and if that number is higher than the max frames in flight, then loop it back around to 1
 }
 
 void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* swapchain) {  // take in a pointer to the context, the size(which will be the window size to start), and a pointer to the vulkan swapchain stuct
@@ -175,7 +178,7 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
         swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;             // define the image sharing mode as exclusive
         swapchain_create_info.queueFamilyIndexCount = 0;                                // define the queue family index count as 0
         swapchain_create_info.pQueueFamilyIndices = 0;                                  // and the indices at 0 as well
-    } 
+    }
 
     // final bit of the create info
     swapchain_create_info.preTransform = context->device.swapchain_support.capabilities.currentTransform;  // define the pretransform using swapchain cappabilities currenttransform - transform of image vs presentation - like portrait vs landscape as an example
@@ -255,5 +258,3 @@ void destroy(vulkan_context* context, vulkan_swapchain* swapchain) {  // pass in
 
     vkDestroySwapchainKHR(context->device.logical_device, swapchain->handle, context->allocator);  // destroy the swapchain
 }
-
-

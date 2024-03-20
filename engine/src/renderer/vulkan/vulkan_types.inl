@@ -72,6 +72,14 @@ typedef struct vulkan_renderpass {
     vulkan_render_pass_state state;  // track the state of the vulkan render pass
 } vulkan_renderpass;
 
+// where we store the data for the vulkan framebuffer
+typedef struct vulkan_framebuffer {
+    VkFramebuffer handle;           // store the handle to the framebuffer
+    u32 attachment_count;           // keep a count of the number of attachments
+    VkImageView* attachments;       // a pointer to an array of attachments
+    vulkan_renderpass* renderpass;  // hold a pointer to the renderpass it is associated with
+} vulkan_framebuffer;
+
 // where we hold the data for the vulkan swapchain
 typedef struct vulkan_swapchain {
     VkSurfaceFormatKHR image_format;  // format for the images that we render too
@@ -82,6 +90,9 @@ typedef struct vulkan_swapchain {
     VkImageView* views;               // images arent accessed directly in vulkan instead accessed through views - so every image has an accompanying view
 
     vulkan_image depth_attachment;  // where to store the info for the depth image
+
+    // framebuffers used for onscreen rendering
+    vulkan_framebuffer* framebuffers;  // an array of framebuffers
 } vulkan_swapchain;
 
 // an enumeration of all the vulkan command buffer states - these are actually changed within vulkan, but we need to keep track of them for the application
@@ -101,6 +112,12 @@ typedef struct vulkan_command_buffer {
     // command buffer state
     vulkan_command_buffer_state state;  // keep track of the state of the command buffer
 } vulkan_command_buffer;
+
+// where we store the info for fences
+typedef struct vulkan_fence {
+    VkFence handle;  // holds a handle to the fence
+    b8 is_signaled;  // and a bool on whether it is signaled or not - signaled because an operation has completed
+} vulkan_fence;
 
 // this is where we hold all of our static data for this renderer
 typedef struct vulkan_context {
@@ -125,6 +142,19 @@ typedef struct vulkan_context {
 
     // darray -- we are going to have a whole array of command buffers
     vulkan_command_buffer* graphics_command_buffers;  // an array to store all of the graphics queue command buffers
+
+    // syncronization objects
+    // darray
+    VkSemaphore* image_available_semaphores;  // when an image is available for rendering, these semaphores are triggered
+
+    // darray
+    VkSemaphore* queue_complete_semaphores;  // triggered when a queue has been run and the image is ready to be presented
+
+    u32 in_flight_fence_count;       // need to keep track of how many fences are in flight
+    vulkan_fence* in_flight_fences;  // the array of fences in flight
+
+    // holds pointers to fences which exist and are owned elsewhere
+    vulkan_fence** images_in_flight;  // possibly they are in in flight fences at the moment, keeps track of them
 
     u32 image_index;    // to keep track of images in the swap chain - index of the image that we are currently using
     u32 current_frame;  // keep track of the frames
