@@ -101,3 +101,12 @@ STATIC_ASSERT(sizeof(f64) == 8, "Expected f64 to be 8 bytes.");
 // if value is above the max, then value becomes max, or if value is less than min, then value becomes min
 #define KCLAMP(value, min, max) (value <= min) ? min : (value >= max) ? max \
                                                                       : value;
+
+// inlining
+#ifdef _MSC_VER
+#define KINLINE __forceinline           // removes the fuction call and just runs the code inside, which can help speed things up
+#define KNOINLINE __declspec(noinline)  // this one says do not do an inline for any reason
+#else
+#define KINLINE static inline  // removes the fuction call and just runs the code inside, which can help speed things up
+#define KNOINLINE
+#endif

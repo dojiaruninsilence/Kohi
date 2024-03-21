@@ -288,14 +288,16 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
         context.surface = 0;                                                        // set the surface to zero
     }
 
+#if defined(_DEBUG)  // if in debug mode
     // destroy the vulkan debugger
     KDEBUG("Destroying Vulkan debugger...");
     if (context.debug_messenger) {                                                                                                                                   // check that it exists
         PFN_vkDestroyDebugUtilsMessengerEXT func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(context.instance, "vkDestroyDebugUtilsMessengerEXT");  // get a function pointer to destroy debug messenger ext func
         func(context.instance, context.debug_messenger, context.allocator);                                                                                          // then call the function
     }
+#endif
 
-    // destroy the vulkan debugger
+    // destroy the vulkan instance
     KDEBUG("Destroying Vulkan instance...");
     vkDestroyInstance(context.instance, context.allocator);  // use vulkan function to destroy the instance
 }
@@ -386,7 +388,7 @@ b8 vulkan_renderer_backend_begin_frame(renderer_backend* backend, f32 delta_time
 
     // issue commands
     vkCmdSetViewport(command_buffer->handle, 0, 1, &viewport);  // call a vulkan function to set the viewport, pass it a handle to the command buffer for the current frame, vieport index is zero, one viewport, and address to the viewport we setup
-    vkCmdSetScissor(command_buffer->handle, 0, 1, &scissor);       // call a vulkan function to clip everything that is outside of the viewport, pass it the handle to the current framebuffer, viewport index is zero, one viewport, and the scissor rect created above
+    vkCmdSetScissor(command_buffer->handle, 0, 1, &scissor);    // call a vulkan function to clip everything that is outside of the viewport, pass it the handle to the current framebuffer, viewport index is zero, one viewport, and the scissor rect created above
 
     // set the width and height of the main renderpass by passing in values from the framebuffer -- may be uneccassary to do every frame
     context.main_renderpass.w = context.framebuffer_width;
