@@ -11,6 +11,22 @@ void vulkan_renderpass_create(
     f32 depth,                          // pass in a depth
     u32 stencil) {                      // pass in a stencil
 
+    // copy over the render area info
+    out_renderpass->x = x;
+    out_renderpass->y = y;
+    out_renderpass->w = w;
+    out_renderpass->h = h;
+
+    // copy over the rgba info
+    out_renderpass->r = r;
+    out_renderpass->g = g;
+    out_renderpass->b = b;
+    out_renderpass->a = a;
+
+    // copy over the depth info
+    out_renderpass->depth = depth;
+    out_renderpass->stencil = stencil;
+
     // main subpass
     VkSubpassDescription subpass = {};                            // create the subpass with null value
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;  // set the subpass pipeline bind point to graphics - going to be used for graphics

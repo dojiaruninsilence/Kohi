@@ -127,6 +127,13 @@ typedef struct vulkan_context {
     // the framebuffer's current height
     u32 framebuffer_height;
 
+    // if the next two values are out of sync we will know that a resize has happened
+    // current generation of framebuffer size. if it does not match frame_buffer_size_last_genertation, a new one should be generated
+    u64 framebuffer_size_generation;  // will be defaulted to zero
+
+    // the generation of the framebuffer when it was last created. set to frame_buffer_size_generation when updated
+    u64 framebuffer_size_last_generation;  // keep track of the last time the frambuffer size had been changed
+
     VkInstance instance;               // vulkan instance, part of the vulkan library, all vulkan stuff is going to be preppended with 'VK' -- handle of the instance
     VkAllocationCallbacks* allocator;  // vulkan memory allocator
     VkSurfaceKHR surface;              // vulkan needs a surface to render to. add it to the context, which will come from the platform layer

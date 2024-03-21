@@ -28,15 +28,16 @@ typedef struct application_state {
 static b8 initialized = FALSE;  // prevent calling application create more than once. which would cause a failure
 static application_state app_state;
 
-// foreward declared functions, look up what this means
+// foreward declared functions, look up what this means - private functions
 // event handlers
-b8 application_on_event(u16 code, void* sender, void* listener_inst, event_context context);  // genaric
-b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context);    // on key
+b8 application_on_event(u16 code, void* sender, void* listener_inst, event_context context);   // genaric -- pass in the code, a pointer to the sender, a pointer to the instance, and the context
+b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context);     // on key -- pass in the code, a pointer to the sender, a pointer to the instance, and the context
+b8 application_on_resized(u16 code, void* sender, void* listener_inst, event_context context);  // on resized event, pass in the code, a pointer to the sender, a pointer to the instance, and the context
 
-b8 application_create(game* game_inst) {  // this error does not seem to actually be an error
-    if (initialized) {
-        KERROR("application_create called more than once.");
-        return FALSE;
+b8 application_create(game* game_inst) {                      // this error does not seem to actually be an error
+    if (initialized) {                                        // initialized is set to true
+        KERROR("application_create called more than once.");  // throw an error
+        return FALSE;                                         // boot out
     }
 
     app_state.game_inst = game_inst;  // set game instance. from game_types.h
@@ -66,6 +67,7 @@ b8 application_create(game* game_inst) {  // this error does not seem to actuall
     event_register(EVENT_CODE_APPLICATION_QUIT, 0, application_on_event);
     event_register(EVENT_CODE_KEY_PRESSED, 0, application_on_key);
     event_register(EVENT_CODE_KEY_RELEASED, 0, application_on_key);
+    event_register(EVENT_CODE_RESIZED, 0, application_on_resized);
 
     // start the platform layer and input the config data from the application_config struct
     if (!platform_startup(&app_state.platform,
@@ -172,7 +174,8 @@ b8 application_run() {
     // event listeners - unregister
     event_unregister(EVENT_CODE_APPLICATION_QUIT, 0, application_on_event);
     event_unregister(EVENT_CODE_KEY_PRESSED, 0, application_on_key);
-    event_unregister(EVENT_CODE_KEY_RELEASED, 0, application_on_key);
+    event_unregister(EVENT_CODE_KEY_RELEASED, 0, application_on_key);    
+    event_unregister(EVENT_CODE_RESIZED, 0, application_on_resized);
 
     event_shutdown();  // shutdown the event system
     input_shutdown();  // shutdown the input system
@@ -227,5 +230,38 @@ b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context
             KDEBUG("'%c' key released in window.", key_code);  // if b wasnt released, what was
         }
     }
+    return FALSE;
+}
+
+// on resized event, pass in the code, a pointer to the sender, a pointer to the instance, and the context - this is an event handler
+b8 application_on_resized(u16 code, void* sender, void* listener_inst, event_context context) {
+    if (code == EVENT_CODE_RESIZED) {      // if it is a resized event
+        u16 width = context.data.u16[0];   // from the u16 array in context data get the width from index 0
+        u16 height = context.data.u16[1];  // and the height from index 1
+
+        // check if different. if so, trigger a resize event
+        if (width != app_state.width || height != app_state.height) {
+            app_state.width = width;    // pass in the width from the context
+            app_state.height = height;  // pass in the height from the context
+
+            KDEBUG("Window resize: %i, %i", width, height);  // display the dimendions in a debug msg
+
+            // handle minimization
+            if (width == 0 || height == 0) {                                // if either the width or the height are 0
+                KINFO("Window is minimized, suspending the application.");  // throw a message
+                app_state.is_suspended = TRUE;                              // set the app state to suspended
+                return TRUE;
+            } else {                                                  // if width and height arent 0
+                if (app_state.is_suspended) {                         // if app state is suspended
+                    KINFO("Window restored, resuming application.");  // throw an info msg
+                    app_state.is_suspended = FALSE;                   // ans set the app state to not suspended
+                }
+                app_state.game_inst->on_resize(app_state.game_inst, width, height);  // call the function pointer on resize, pass in  the game inst, and the dimaensions
+                renderer_on_resized(width, height);                                  // call the renderer on resized function, and pass through the width and height
+            }
+        }
+    }
+
+    // event purposefully not handled to allow other listeners to get this
     return FALSE;
 }

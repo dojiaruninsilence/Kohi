@@ -262,12 +262,16 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
             return 0;
         case WM_SIZE: {  // commented out for now, need to do some more first
             // Get the updated size
-            // RECT r; // think rect is a representation of the window border? the rest is easy to see
-            // GetClientRect(hwnd, &r);
-            // u32 width = r.right - r.left;
-            // u32 height = r.bottom - r.top;
+            RECT r;                         // think rect is a representation of the window border? the rest is easy to see
+            GetClientRect(hwnd, &r);        // call a windows function to get the window rectangel, pass in the handle to the window and the rect r
+            u32 width = r.right - r.left;   // width is the right ppoition minus the left position
+            u32 height = r.bottom - r.top;  // height is the bottom position  minus the top position
 
-            // TODO: fire off an event for window resizing
+            // fire the event. the application layer should pick this up, but not handle it as it shouldnt be visible to other parts of the application
+            event_context context;                       // create an event context struct context
+            context.data.u16[0] = (u16)width;            // in the u16 data array input the width converted to a u16 at index 0
+            context.data.u16[1] = (u16)height;           // in the u16 data array input the height converted to a u16 at index 1
+            event_fire(EVENT_CODE_RESIZED, 0, context);  // fire off the event with the resized code, no sender, and the context just filled out
         } break;
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:

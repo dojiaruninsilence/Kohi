@@ -8,6 +8,7 @@
 #include "vulkan_command_buffer.h"
 #include "vulkan_framebuffer.h"
 #include "vulkan_fence.h"
+#include "vulkan_utils.h"
 
 #include "core/logger.h"
 #include "core/kstring.h"
@@ -37,6 +38,7 @@ i32 find_memory_index(u32 type_filter, u32 property_flags);
 
 void create_command_buffers(renderer_backend* backend);                                                               // private function to create command buffers, just takes in the renderer backend
 void regenerate_framebuffers(renderer_backend* backend, vulkan_swapchain* swapchain, vulkan_renderpass* renderpass);  // private function to create/regenerate framebuffers, pass in pointers to the backend, the swapchain, and the renderpass - going to hook all these together
+b8 recreate_swapchain(renderer_backend* backend);                                                                     // private function to recreate the swapchain, just takes in a pointer to the backend
 
 b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* application_name, struct platform_state* plat_state) {
     // function pointers
@@ -299,13 +301,180 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
 }
 
 void vulkan_renderer_backend_on_resized(renderer_backend* backend, u16 width, u16 height) {
+    // update the "framebuffer size generation", a counter which indicates when the framebuffer size has been updated
+    cached_framebuffer_width = width;       // pass in the width
+    cached_framebuffer_height = height;     // pass in the height
+    context.framebuffer_size_generation++;  // increment the frambuffer size generation - whenever this changes we know that we have recieved a resize event
+
+    KINFO("Vulkan renderer backend->resized: w/h/gen: %i/%i/%llu", width, height, context.framebuffer_size_generation);
 }
 
 b8 vulkan_renderer_backend_begin_frame(renderer_backend* backend, f32 delta_time) {
+    vulkan_device* device = &context.device;  // just to make writting the code a little bit easier and cleaner - conveneience pointer
+
+    // check if recreating swap chain and boot out
+    if (context.recreating_swapchain) {                                                                                           // is context in a recreating swapchain state
+        VkResult result = vkDeviceWaitIdle(device->logical_device);                                                               // run the vulkan function to wait until the device is idle and store results in result
+        if (!vulkan_result_is_success(result)) {                                                                                  // use function to determine the success of result, if failed
+            KERROR("vulkan_renderer_backend_begin_frame vkDeviceWaitIdle (1) failed: '%s'", vulkan_result_string(result, TRUE));  // throw error using a string from result to fill out message
+            return FALSE;                                                                                                         // boot out
+        }
+        // if waited successfully
+        KINFO("Recreating swapchain, booting.");
+        return FALSE;
+    }
+
+    // check if the framebuffer has been resized. if so, a new swapchain must be created
+    if (context.framebuffer_size_generation != context.framebuffer_size_last_generation) {                                        // if the frambuffer size generation is not the same as last generation, the window has been resized
+        VkResult result = vkDeviceWaitIdle(device->logical_device);                                                               // run the vulkan function to wait until the device is idle and store results in result
+        if (!vulkan_result_is_success(result)) {                                                                                  // use function to determine the success of result, if failed
+            KERROR("vulkan_renderer_backend_begin_frame vkDeviceWaitIdle (2) failed: '%s'", vulkan_result_string(result, TRUE));  // throw error using a string from result to fill out message
+            return FALSE;                                                                                                         // boot out
+        }
+
+        // if the swapchain recreation failec(because, for example, the window was minimized), boot out before unsetting the flag
+        if (!recreate_swapchain(backend)) {  // run the function to recreate the swapchain, and if it fails
+            return FALSE;                    // boot out
+        }
+
+        KINFO("Resized, booting.");
+        return FALSE;
+    }
+
+    // if no resizing and no swapchain recreation then
+    // wait for the execution of the current frame to complete. the fence being free will allow this one to move on
+    if (!vulkan_fence_wait(                                    // run the function and if it fails
+            &context,                                          // pass in an address to the context
+            &context.in_flight_fences[context.current_frame],  // get the in flight fence for the current frame
+            UINT64_MAX)) {                                     // bogus value
+        KWARN("in-flight fence wait failure");                 // throw warn if it fails
+        return FALSE;                                          // boot out, not too bad an error, but dont continue
+    }
+
+    // aquire the next image from the swap chain. pass along the semaphore that should be signaled when this completes
+    // this same semaphore will later be waited on by the queue submission to ensure this image is available
+    if (!vulkan_swapchain_acquire_next_image_index(                     // call the function to aquire the next image index
+            &context,                                                   // pass an address to the context
+            &context.swapchain,                                         // and an address to the swapchain
+            UINT64_MAX,                                                 // a bogus high value
+            context.image_available_semaphores[context.current_frame],  // the image available semaphore that is attached to the current frame - and should be signaled when this completes use current frame to sync them up
+            0,                                                          // no time out
+            &context.image_index)) {                                    // and the index of the image being aquired
+        return FALSE;
+    }
+
+    // begin recording commands
+    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // convenience pointer, to svae time and cleaner code
+    vulkan_command_buffer_reset(command_buffer);                                                     // reset the command buffer at image index to the ready state
+    vulkan_command_buffer_begin(command_buffer, FALSE, FALSE, FALSE);                                // begin the command buffer with single use, renderpass continuos, and simultaneous use to false
+
+    // set the viewport
+    // dynamic state - must be set every frame
+    VkViewport viewport;                                 // define a vulkan viewport
+    viewport.x = 0.0f;                                   // starts at 0.0 on the x axis  -- vulkan by default is 0, 0 at the top left corner
+    viewport.y = (f32)context.framebuffer_height;        // starts at the height of the framebuffer for the y, which flips the viewport, so that it is consistant with opengl
+    viewport.width = (f32)context.framebuffer_width;     // pass in the width from the framebuffer
+    viewport.height = -(f32)context.framebuffer_height;  // pass in the height from the framebuffer and make negative, again to flip the y axis to match opengl
+    viewport.minDepth = 0.0f;                            // z values
+    viewport.maxDepth = 1.0f;                            // z values
+
+    // scissor, this determines what parts get rendered and what gets clipped
+    VkRect2D scissor;                                    // define a vulkan rectangle and call scissor
+    scissor.offset.x = scissor.offset.y = 0;             // set the scissor offset for the x and they y to 0
+    scissor.extent.width = context.framebuffer_width;    // pass in width from the frame buffer
+    scissor.extent.height = context.framebuffer_height;  // pass in the height from the frame buffer
+
+    // issue commands
+    vkCmdSetViewport(command_buffer->handle, 0, 1, &viewport);  // call a vulkan function to set the viewport, pass it a handle to the command buffer for the current frame, vieport index is zero, one viewport, and address to the viewport we setup
+    vkCmdSetScissor(command_buffer->handle, 0, 1, &scissor);       // call a vulkan function to clip everything that is outside of the viewport, pass it the handle to the current framebuffer, viewport index is zero, one viewport, and the scissor rect created above
+
+    // set the width and height of the main renderpass by passing in values from the framebuffer -- may be uneccassary to do every frame
+    context.main_renderpass.w = context.framebuffer_width;
+    context.main_renderpass.h = context.framebuffer_height;
+
+    // begin the render pass
+    vulkan_renderpass_begin(
+        command_buffer,                                               // pass in the current command buffer
+        &context.main_renderpass,                                     // an address to the main renderpass
+        context.swapchain.framebuffers[context.image_index].handle);  // and the handle to the frame buffer at image index in context
+
     return TRUE;
 }
 
 b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) {
+    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // conveinience pointer
+
+    // end the renderpass
+    vulkan_renderpass_end(command_buffer, &context.main_renderpass);  // call our funtion to end renderpass, pass in the current graphics command buffer, and an address to the main renderpass
+
+    // end the command buffer- calling our function. just pass in the current graphics command buffer
+    vulkan_command_buffer_end(command_buffer);
+
+    // make sure the previous frame is not using this image (i.e. its fence is being waited on)
+    if (context.images_in_flight[context.image_index] != VK_NULL_HANDLE) {  // if there is acctually in images in flight at image index
+        vulkan_fence_wait(                                                  // call our function to wait for a fence
+            &context,                                                       // pass in an address to the context
+            context.images_in_flight[context.image_index],                  // pass in the image in flight at the image index
+            UINT64_MAX);                                                    // bogus high value
+    }
+
+    // mark the image fence as in use by this frame
+    context.images_in_flight[context.image_index] = &context.in_flight_fences[context.current_frame];  // assign the current inflight fence to the image in flight at image index
+
+    // reset the fence for use on the next frame
+    vulkan_fence_reset(&context, &context.in_flight_fences[context.current_frame]);  // use out function to reset a fence, pass in the address to the context, the address to the in flight fence of the current frame
+
+    // call to submit the work
+    // submit the queue and wait for the operation to complete
+    // begin queue submission
+    VkSubmitInfo submit_info = {VK_STRUCTURE_TYPE_SUBMIT_INFO};  // create a submit info struct and use the provided macro to fill it with default values
+
+    // command buffer(s) to be executed
+    submit_info.commandBufferCount = 1;                     // only one command buffer for now
+    submit_info.pCommandBuffers = &command_buffer->handle;  // pass in the address to the command buffer handle
+
+    // the semaphore(s) to be signaled when the queue is complete
+    submit_info.signalSemaphoreCount = 1;                                                       // only using one semaphore for now
+    submit_info.pSignalSemaphores = &context.queue_complete_semaphores[context.current_frame];  // pass in the address of the queue complete semaphore at the index of the current frame
+
+    // wait semaphore ensures that the operation cannot begin until the image is available.
+    submit_info.waitSemaphoreCount = 1;                                                        // only using one wait semaphore for now
+    submit_info.pWaitSemaphores = &context.image_available_semaphores[context.current_frame];  // pass in the address of the image available semaphore at the index of the current frame
+
+    // this is how we ensure that only one of the triple buffers gets displayed
+    // each semaphore waits on the corresponding pipeline stage to complete. 1:1 ratio.
+    // VK_PIPLINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT prvents subsequent colour attachment writes from executing until the semaphore signals (i.e. one frame is presented at a time)
+    VkPipelineStageFlags flags[1] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};  // eventually there will be more here, this accepts an array
+    submit_info.pWaitDstStageMask = flags;                                            // pass all the flags in
+
+    VkResult result = vkQueueSubmit(                              // run the vulkan function to submit a queue and store the results in result
+        context.device.graphics_queue,                            // pass in the graphics queue
+        1,                                                        // only submitting one queue for now
+        &submit_info,                                             // pass in the info struct we just created
+        context.in_flight_fences[context.current_frame].handle);  // and the handle to the in flight fence at the index of the current frame
+
+    // check the results of submit
+    if (result != VK_SUCCESS) {                                                              // if the submit was unsuccessful
+        KERROR("vkQueueSubmit failed with result: %s", vulkan_result_string(result, TRUE));  // throw out an error message, with the info of failure
+        return FALSE;
+    }
+
+    // update the command buffer
+    vulkan_command_buffer_update_submitted(command_buffer);  // change the current command buffer's state to submitted
+
+    // end the queue submission
+
+    // here is where it is drawn to the screen
+    // give the image back to the swapchain
+    vulkan_swapchain_present(                                      // call our function to present the swapchain
+        &context,                                                  // pass in an address to the context
+        &context.swapchain,                                        // an address to the swapchain
+        context.device.graphics_queue,                             // the graphics queue
+        context.device.present_queue,                              // the present queue
+        context.queue_complete_semaphores[context.current_frame],  // the queue complete semaphore of the index of the current frame
+        context.image_index);                                      // and the image index
+
+    // if all of this has passed, we have rendered to the screen
     return TRUE;
 }
 
@@ -392,4 +561,83 @@ void regenerate_framebuffers(renderer_backend* backend, vulkan_swapchain* swapch
             attachments,                          // array created above
             &context.swapchain.framebuffers[i]);  // address of the framebuffer being created at index i
     }
+}
+
+b8 recreate_swapchain(renderer_backend* backend) {  // private function to recreate the swapchain, just takes in a pointer to the backend
+    // if already being recreated, do not try again
+    if (context.recreating_swapchain) {                                        // if the context is in a recreating swapchain stae
+        KDEBUG("recreate_swapchain called when already recreating. Booting");  // throw a debug msg
+        return FALSE;                                                          // boot out
+    }
+
+    // detect if the window is too small to be drawn to such as minimized
+    if (context.framebuffer_width == 0 || context.framebuffer_height == 0) {             // if either the width or the height of the framebuffer is 0
+        KDEBUG("recreate_swapchain called when window is < 1 in a dimention. Booting");  // throe a debug msg
+        return FALSE;                                                                    // boot out
+    }
+
+    // mark as recreating swapchain
+    context.recreating_swapchain = TRUE;
+
+    // wait for any operations to complete
+    vkDeviceWaitIdle(context.device.logical_device);  // use the vulkan function to wait until the device is idle
+
+    // clear these out just in case
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {  // iterate through the swapchain images
+        context.images_in_flight[i] = 0;                       // set each one to zero
+    }
+
+    // requery support -- because it may have changed since the last time we queried it
+    vulkan_device_query_swapchain_support(               // call our function to query the swapchain support
+        context.device.physical_device,                  // pass in the physical device
+        context.surface,                                 // pass in the surface
+        &context.device.swapchain_support);              // and an address to the swapchain support
+    vulkan_device_detect_depth_format(&context.device);  // check the depth format of the device, pass in the address to the device - make sure that we have the most up to date format
+
+    // recreate the swapchain, use our function
+    vulkan_swapchain_recreate(
+        &context,                   // pass in the address to the context
+        cached_framebuffer_width,   // the cached frame buffer width
+        cached_framebuffer_height,  // and height
+        &context.swapchain);        // and the address to the swapchain being recreated
+
+    // sync the framebuffer size with the cached sizes
+    context.framebuffer_width = cached_framebuffer_width;
+    context.framebuffer_height = cached_framebuffer_height;
+    context.main_renderpass.w = context.framebuffer_width;
+    context.main_renderpass.h = context.framebuffer_height;
+
+    // reset the cached sizes to zero
+    cached_framebuffer_width = 0;
+    cached_framebuffer_height = 0;
+
+    // syncronize the framebuffer size generation
+    context.framebuffer_size_last_generation = context.framebuffer_size_generation;
+
+    // cleanup the swapchain - free all of the command buffers
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {                                                              // iterate through all of the swapchain images
+        vulkan_command_buffer_free(&context, context.device.graphics_command_pool, &context.graphics_command_buffers[i]);  // send the graphics command buffer at index i, back to the graphics command pool. need to pass in the context
+    }
+
+    // destroy the framebuffers, they are no longer valid
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {                      // iterate through the swapchain images
+        vulkan_framebuffer_destroy(&context, &context.swapchain.framebuffers[i]);  // use our function to destroy a framebuffer, pass in an address to the context, and the address to the frambuffer at index i, the one being destroyed
+    }
+
+    // copy over a new render area - set the x and y to 0, and get the size from the framebuffer
+    context.main_renderpass.x = 0;
+    context.main_renderpass.y = 0;
+    context.main_renderpass.w = context.framebuffer_width;
+    context.main_renderpass.h = context.framebuffer_height;
+
+    // re create the framebuffers
+    regenerate_framebuffers(backend, &context.swapchain, &context.main_renderpass);  // call our regen framebuffers function, pass it the backend, an address to the swapchain, and an address to the main renderpass
+
+    // re create the command buffers
+    create_command_buffers(backend);  // pass it the backend
+
+    // clear the recreating flag - no longer in recreating swapchain state
+    context.recreating_swapchain = FALSE;
+
+    return TRUE;
 }

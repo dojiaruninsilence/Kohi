@@ -249,6 +249,7 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
 }
 
 void destroy(vulkan_context* context, vulkan_swapchain* swapchain) {  // pass in a pointer to the context, and a pointer to the vulkan swapchain struct
+    vkDeviceWaitIdle(context->device.logical_device);                 // use the vulkan function to wait until the device is idle
     vulkan_image_destroy(context, &swapchain->depth_attachment);      // destroy the depth attachment
 
     // only detroy the views, not the images, since those are owned by the swapchain and are thus destroyed when it is

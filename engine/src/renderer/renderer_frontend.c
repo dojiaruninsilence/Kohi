@@ -8,6 +8,7 @@
 // backend render context - going to have only a single backend to start with, keep it simple that may change
 static renderer_backend* backend = 0;  // create back end with no value
 
+// initialize the renderer
 b8 renderer_initialize(const char* application_name, struct platform_state* plat_state) {
     backend = kallocate(sizeof(renderer_backend), MEMORY_TAG_RENDERER);  // allocate memory for the renderer backend and tag it with renderer
 
@@ -23,19 +24,31 @@ b8 renderer_initialize(const char* application_name, struct platform_state* plat
     return TRUE;
 }
 
+// shutdown the renderer
 void renderer_shutdown() {
     backend->shutdown(backend);                                     // call backend shut down -- another pointer function from renderer types
     kfree(backend, sizeof(renderer_backend), MEMORY_TAG_RENDERER);  // free the memory allocated to the renderer backend - passing in the approptiate tag. cleans up memory
 }
 
+// begin a renderer frame - pass in the delta time
 b8 renderer_begin_frame(f32 delta_time) {
     return backend->begin_frame(backend, delta_time);  // call backend begin frame pointer function
 }
 
+// end a renderer frame - pass in the delta time
 b8 renderer_end_frame(f32 delta_time) {
     b8 result = backend->end_frame(backend, delta_time);  // call backend end frame pointer function
     backend->frame_number++;                              // increment the backend frame number
     return result;
+}
+
+// on a renderer resize
+void renderer_on_resized(u16 width, u16 height) {
+    if (backend) {                                                                        // verify that a renderer backend exists to resize
+        backend->resized(backend, width, height);                                         // call the pointer function resized and pass in the backend, and pass through the width and the height
+    } else {                                                                              // if no backend
+        KWARN("renderer backend does not exist to accept resize: %i %i", width, height);  // throw a warning
+    }
 }
 
 // where the application calls for all draw calls?
