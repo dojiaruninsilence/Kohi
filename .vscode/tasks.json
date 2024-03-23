@@ -45,10 +45,10 @@
             "type": "shell",
             "label": "Build Everything",
             "windows": {
-                "command": "${workspaceFolder}/build-all.bat"
+                "command": "${workspaceFolder}/build-all.bat",
             },
             "linux": {
-                "command": "${workspaceFolder}/build-all.sh"
+                "command": "${workspaceFolder}/build-all.sh",
             },
             "osx": {
                 "command": "${workspaceFolder}/build-all-macos.sh",
@@ -73,6 +73,9 @@
             "linux": {
                 "command": "${workspaceFolder}/clean-all.sh",
             },
+            "osx": {
+                "command": "${workspaceFolder}/clean-all-macos.sh",
+            },
             "options": {
                 "cwd": "${workspaceFolder}"
             },
@@ -85,6 +88,9 @@
                 "command": "${workspaceFolder}/post-build.bat",
             },
             "linux": {
+                "command": "${workspaceFolder}/post-build.sh",
+            },
+            "osx": {
                 "command": "${workspaceFolder}/post-build.sh",
             },
             "options": {
