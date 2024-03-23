@@ -42,12 +42,8 @@ typedef struct vec3_u {
 
 // vector 3 union  - can input a combination of any of these below - is a union of types. they all take the same amount of space up
 typedef union vec4_u {
-#if defined(KUSE_SIMD)  // not going to be using this for now, need to learn what simd is - single instruction multiple data
-    // used for SIMD operations
-    alignas(16) __m128 data;
-#endif
     // an array of x, y, z, w
-    alignas(16) f32 elements[4];  // create an aligned array of elements
+    f32 elements[4];  // create an aligned array of elements
     union {
         struct {
             union {
@@ -70,4 +66,10 @@ typedef union vec4_u {
     };
 } vec4;
 
-typedef vec4 quat;
+typedef vec4 quat;  // can use quat instead of vec4 for clarity sake later on
+
+// mat 4 union
+typedef union mat4_u {
+    f32 data[16];  // align memory for a 16 element floating point array, call it data - for a 4 by 4 matrix
+
+} mat4;
