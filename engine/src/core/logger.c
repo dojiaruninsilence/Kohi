@@ -11,7 +11,7 @@
 
 b8 initilize_logging() {
     // TODO: create log file.
-    return TRUE;
+    return true;
 }
 
 void shutdown_logging() {

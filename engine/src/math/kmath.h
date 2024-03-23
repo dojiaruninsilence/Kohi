@@ -194,14 +194,14 @@ KINLINE vec2 vec2_normalized(vec2 vector) {
 // @return true if within tolerance; otherwise false
 KINLINE b8 vec2_compare(vec2 vector_0, vec2 vector_1, f32 tolerance) {
     if (kabs(vector_0.x - vector_1.x) > tolerance) {  // if the absolute value of vec0 x - vec1 x is greater than the tolerance
-        return FALSE;                                 // is false
+        return false;                                 // is false
     }
 
     if (kabs(vector_0.y - vector_1.y) > tolerance) {  // if the absolute value of vec0 y - vec1 y is greater than the tolerance
-        return FALSE;                                 // is false
+        return false;                                 // is false
     }
     // if neither triggered is true
-    return TRUE;
+    return true;
 }
 
 // @brief returns the distance between vector 0 and vector 1
@@ -409,18 +409,18 @@ KINLINE vec3 vec3_cross(vec3 vector_0, vec3 vector_1) {
 // @return true if within tolerance; otherwise false
 KINLINE b8 vec3_compare(vec3 vector_0, vec3 vector_1, f32 tolerance) {
     if (kabs(vector_0.x - vector_1.x) > tolerance) {  // if the absolute value of vec0 x - vec1 x is greater than the tolerance
-        return FALSE;                                 // is false
+        return false;                                 // is false
     }
 
     if (kabs(vector_0.y - vector_1.y) > tolerance) {  // if the absolute value of vec0 y - vec1 y is greater than the tolerance
-        return FALSE;                                 // is false
+        return false;                                 // is false
     }
 
     if (kabs(vector_0.z - vector_1.z) > tolerance) {  // if the absolute value of vec0 z - vec1 z is greater than the tolerance
-        return FALSE;                                 // is false
+        return false;                                 // is false
     }
     // if none triggered is true
-    return TRUE;
+    return true;
 }
 
 // @brief returns the distance between vector 0 and vector 1

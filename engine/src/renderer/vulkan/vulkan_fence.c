@@ -32,7 +32,7 @@ void vulkan_fence_destroy(vulkan_context* context, vulkan_fence* fence) {
             fence->handle,                   // and the handle to the fence being destroyed
             context->allocator);             // and the memory allocaton stuffs
     }
-    fence->is_signaled = FALSE;  // reset is signaled to false
+    fence->is_signaled = false;  // reset is signaled to false
 }
 
 // function to tell a fence to wait, takes in a pointer to the vulkan context, and a pointer to the fence to wait, and the time it should wait in nano seconds
@@ -42,12 +42,12 @@ b8 vulkan_fence_wait(vulkan_context* context, vulkan_fence* fence, u64 timeout_n
             context->device.logical_device,  // pass it the logical device
             1,                               // number of fences set to 0
             &fence->handle,                  // and address for the fence handle
-            TRUE,                            // wait all is set to true - wait on all fences passed in
+            true,                            // wait all is set to true - wait on all fences passed in
             timeout_ns);                     // pass the time through
         switch (result) {                    // what was the result
             case VK_SUCCESS:                 // if success
-                fence->is_signaled = TRUE;   // fence is signaled
-                return TRUE;
+                fence->is_signaled = true;   // fence is signaled
+                return true;
             case VK_TIMEOUT:  // if not true, throw a warning and break out
                 KWARN("vk_fence_wait - timed out");
                 break;
@@ -66,17 +66,17 @@ b8 vulkan_fence_wait(vulkan_context* context, vulkan_fence* fence, u64 timeout_n
         }
     } else {
         // if already signaled do not wait
-        return TRUE;
+        return true;
     }
 
     // did not work with a completely irregular way
-    return FALSE;
+    return false;
 }
 
 // reset a vulkan fence - takes in a pointer to the vulkan context, and a pointer to the fence being reset
 void vulkan_fence_reset(vulkan_context* context, vulkan_fence* fence) {
     if (fence->is_signaled) {                                                        // if the fence is signaled
         VK_CHECK(vkResetFences(context->device.logical_device, 1, &fence->handle));  // run the vulkan function to reset fences, pass it the logical device, the number of fences ot reset and the handles to the fences to be reset. check with vk check
-        fence->is_signaled = FALSE;                                                  // fence is no longer signaled
+        fence->is_signaled = false;                                                  // fence is no longer signaled
     }
 }

@@ -25,19 +25,19 @@ typedef struct application_state {
     f64 last_time;  // has to do with the game loop
 } application_state;
 
-static b8 initialized = FALSE;  // prevent calling application create more than once. which would cause a failure
+static b8 initialized = false;  // prevent calling application create more than once. which would cause a failure
 static application_state app_state;
 
 // foreward declared functions, look up what this means - private functions
 // event handlers
-b8 application_on_event(u16 code, void* sender, void* listener_inst, event_context context);   // genaric -- pass in the code, a pointer to the sender, a pointer to the instance, and the context
-b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context);     // on key -- pass in the code, a pointer to the sender, a pointer to the instance, and the context
+b8 application_on_event(u16 code, void* sender, void* listener_inst, event_context context);    // genaric -- pass in the code, a pointer to the sender, a pointer to the instance, and the context
+b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context);      // on key -- pass in the code, a pointer to the sender, a pointer to the instance, and the context
 b8 application_on_resized(u16 code, void* sender, void* listener_inst, event_context context);  // on resized event, pass in the code, a pointer to the sender, a pointer to the instance, and the context
 
 b8 application_create(game* game_inst) {                      // this error does not seem to actually be an error
     if (initialized) {                                        // initialized is set to true
         KERROR("application_create called more than once.");  // throw an error
-        return FALSE;                                         // boot out
+        return false;                                         // boot out
     }
 
     app_state.game_inst = game_inst;  // set game instance. from game_types.h
@@ -54,13 +54,13 @@ b8 application_create(game* game_inst) {                      // this error does
     KDEBUG("a test message: %f", 3.14f);
     KTRACE("a test message: %f", 3.14f);
 
-    app_state.is_running = TRUE;     // boolean to say the app is running
-    app_state.is_suspended = FALSE;  // suspended is a state in which the application shouldnt be updating or anything - will implement later
+    app_state.is_running = true;     // boolean to say the app is running
+    app_state.is_suspended = false;  // suspended is a state in which the application shouldnt be updating or anything - will implement later
 
     // initialize events and verify it worked
     if (!event_initialize()) {
         KERROR("Event System failed initialization. Application cannot continue");
-        return FALSE;
+        return false;
     }
 
     // event listeners - register
@@ -76,27 +76,27 @@ b8 application_create(game* game_inst) {                      // this error does
                           game_inst->app_config.start_pos_y,
                           game_inst->app_config.start_width,
                           game_inst->app_config.start_height)) {
-        return FALSE;
+        return false;
     }
 
     // renderer startup
     if (!renderer_initialize(game_inst->app_config.name, &app_state.platform)) {
         KFATAL("Game failed to initialize.");
-        return FALSE;
+        return false;
     }
 
     // initialize the game
     if (!app_state.game_inst->initialize(app_state.game_inst)) {
         KFATAL("Game failed to initialize.")
-        return FALSE;
+        return false;
     }
 
     // attach event handler for resizing events -- not ready for this to work yet but getting it ready
     app_state.game_inst->on_resize(app_state.game_inst, app_state.width, app_state.height);  // game gets the window dimensions when they change - set the app state to fit the dimensions when changed
 
-    initialized = TRUE;
+    initialized = true;
 
-    return TRUE;
+    return true;
 }
 
 b8 application_run() {
@@ -113,7 +113,7 @@ b8 application_run() {
     // this is basically the "game" loop at the moment will run as long as app state remains true
     while (app_state.is_running) {
         if (!platform_pump_messages(&app_state.platform)) {  // if there are no events return false and shut the app doen
-            app_state.is_running = FALSE;                    // shut down application layer
+            app_state.is_running = false;                    // shut down application layer
         }
 
         if (!app_state.is_suspended) {
@@ -125,14 +125,14 @@ b8 application_run() {
 
             if (!app_state.game_inst->update(app_state.game_inst, (f32)delta)) {  // run the update routine. the zero is in polace of delta time for now, will be fixed later
                 KFATAL("Game update failed, shutting down.");
-                app_state.is_running = FALSE;  // shut down the application layer
+                app_state.is_running = false;  // shut down the application layer
                 break;
             }
 
             // call the games render routine
             if (!app_state.game_inst->render(app_state.game_inst, (f32)delta)) {  // again the zero is in place of delta time
                 KFATAL("Game renderer failed, shutting down");
-                app_state.is_running = FALSE;
+                app_state.is_running = false;
                 break;
             }
 
@@ -152,7 +152,7 @@ b8 application_run() {
                 u64 remaining_ms = (remaining_seconds * 1000);  // conver to ms
 
                 // if there is time left, give it back to the os - helps with performance
-                b8 limit_frames = FALSE;  // a switch for enabling the below statement
+                b8 limit_frames = false;  // a switch for enabling the below statement
                 if (remaining_ms > 0 && limit_frames) {
                     platform_sleep(remaining_ms - 1);
                 }
@@ -169,12 +169,12 @@ b8 application_run() {
         }
     }
 
-    app_state.is_running = FALSE;  // in the event it exits the loop while true make sure it shutsdown
+    app_state.is_running = false;  // in the event it exits the loop while true make sure it shutsdown
 
     // event listeners - unregister
     event_unregister(EVENT_CODE_APPLICATION_QUIT, 0, application_on_event);
     event_unregister(EVENT_CODE_KEY_PRESSED, 0, application_on_key);
-    event_unregister(EVENT_CODE_KEY_RELEASED, 0, application_on_key);    
+    event_unregister(EVENT_CODE_KEY_RELEASED, 0, application_on_key);
     event_unregister(EVENT_CODE_RESIZED, 0, application_on_resized);
 
     event_shutdown();  // shutdown the event system
@@ -184,7 +184,7 @@ b8 application_run() {
 
     platform_shutdown(&app_state.platform);  // shut down the platform layer
 
-    return TRUE;
+    return true;
 }
 
 // a way to pass the window size to the renderer, passes out a width and height
@@ -197,12 +197,12 @@ b8 application_on_event(u16 code, void* sender, void* listener_inst, event_conte
     switch (code) {                          // chaeck to see what code was passed
         case EVENT_CODE_APPLICATION_QUIT: {  // if code is app quit
             KINFO("EVENT_CODE_APPLICATION_QUIT recieved, shutting down.\n");
-            app_state.is_running = FALSE;  // switch off the app
-            return TRUE;                   // blocks the app quit from going anywhere else
+            app_state.is_running = false;  // switch off the app
+            return true;                   // blocks the app quit from going anywhere else
         }
     }
 
-    return FALSE;  // if the code not in the list
+    return false;  // if the code not in the list
 }
 
 b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context) {
@@ -214,7 +214,7 @@ b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context
             event_fire(EVENT_CODE_APPLICATION_QUIT, 0, data);  // fire the event
 
             // block anything else from processing this
-            return TRUE;
+            return true;
         } else if (key_code == KEY_A) {
             // example on checking for a key
             KDEBUG("Explicit - A key pressed!");
@@ -230,7 +230,7 @@ b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context
             KDEBUG("'%c' key released in window.", key_code);  // if b wasnt released, what was
         }
     }
-    return FALSE;
+    return false;
 }
 
 // on resized event, pass in the code, a pointer to the sender, a pointer to the instance, and the context - this is an event handler
@@ -249,12 +249,12 @@ b8 application_on_resized(u16 code, void* sender, void* listener_inst, event_con
             // handle minimization
             if (width == 0 || height == 0) {                                // if either the width or the height are 0
                 KINFO("Window is minimized, suspending the application.");  // throw a message
-                app_state.is_suspended = TRUE;                              // set the app state to suspended
-                return TRUE;
+                app_state.is_suspended = true;                              // set the app state to suspended
+                return true;
             } else {                                                  // if width and height arent 0
                 if (app_state.is_suspended) {                         // if app state is suspended
                     KINFO("Window restored, resuming application.");  // throw an info msg
-                    app_state.is_suspended = FALSE;                   // ans set the app state to not suspended
+                    app_state.is_suspended = false;                   // ans set the app state to not suspended
                 }
                 app_state.game_inst->on_resize(app_state.game_inst, width, height);  // call the function pointer on resize, pass in  the game inst, and the dimaensions
                 renderer_on_resized(width, height);                                  // call the renderer on resized function, and pass through the width and height
@@ -263,5 +263,5 @@ b8 application_on_resized(u16 code, void* sender, void* listener_inst, event_con
     }
 
     // event purposefully not handled to allow other listeners to get this
-    return FALSE;
+    return false;
 }

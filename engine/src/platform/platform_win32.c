@@ -66,7 +66,7 @@ b8 platform_startup(
     // after the window class is created it has to be registered - cannot move foreward if this fails
     if (!RegisterClassA(&wc)) {
         MessageBoxA(0, "Window registration failed", "Error", MB_ICONEXCLAMATION | MB_OK);  // in the case that the registration fails pop up a window and let you know - with an ok button to accept it
-        return FALSE;
+        return false;
     }
 
     // Create window - need to be concerned about 2 sizes here, the inner part with the content(client), and the outer part with file, and the tab bar and all that(window)
@@ -113,7 +113,7 @@ b8 platform_startup(
         MessageBox(NULL, "Window creation failed!", "Error!", MB_ICONEXCLAMATION | MB_OK);  // creates a pop up window, with a fail message, an exlamation button and an ok button
 
         KFATAL("Window creation failed!");  // fatal level log message
-        return FALSE;
+        return false;
     } else {
         state->hwnd = handle;  // update the state objects window handle to handle
     }
@@ -132,7 +132,7 @@ b8 platform_startup(
     clock_frequency = 1.0 / (f64)frequency.QuadPart;  // 1 divided by frequency, which is converted to a 64 bit floating point integer
     QueryPerformanceCounter(&start_time);             // gives us a snapshot of the current time
 
-    return TRUE;  // successfully initialized the platform
+    return true;  // successfully initialized the platform
 }
 
 void platform_shutdown(platform_state *plat_state) {
@@ -154,7 +154,7 @@ b8 platform_pump_messages(platform_state *plat_state) {
         DispatchMessageA(&message);                          // dispatch by whatever method is defined in the wc.lpfnWndProc setting above
     }
 
-    return TRUE;  // when there are no messages returns true
+    return true;  // when there are no messages returns true
 }
 
 // all of the next fuctions are just calling their windows couterpartd for the time being, this will be changing
@@ -238,11 +238,11 @@ b8 platform_create_vulkan_surface(platform_state *plat_state, vulkan_context *co
     VkResult result = vkCreateWin32SurfaceKHR(context->instance, &create_info, context->allocator, &state->surface);  // create the window surface using the surface info and allocate memory and store results in result
     if (result != VK_SUCCESS) {                                                                                       // if it succeeded
         KFATAL("Vulkan surface creation failed.");
-        return FALSE;
+        return false;
     }
 
     context->surface = state->surface;
-    return TRUE;
+    return true;
 }  // this is where i left off, the video is at -----------------> 7 49<----------------------------- video #015
 
 // need to learn more about these switch statements - it seems that once they are triggere they just keep moving til they find the first line of code, even if its 3 cases down
@@ -256,7 +256,7 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
             // TODO:  fire an event for the application to quit -- come back after the event system has been built
             event_context data = {};                           // create empty event context call it data
             event_fire(EVENT_CODE_APPLICATION_QUIT, 0, data);  // fire event with code application quit, leave the sender field empty and pass in the data
-            return TRUE;
+            return 0;
         case WM_DESTROY:
             PostQuitMessage(0);  // when window is destroyed you have to post a quit message -- posts WM_QUIT
             return 0;

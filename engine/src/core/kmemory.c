@@ -53,7 +53,7 @@ void* kallocate(u64 size, memory_tag tag) {
 
     // TODO: memory alignment
     // create block of memory
-    void* block = platform_allocate(size, FALSE);  // passing in false for memory alignement for now, will come back too. //perform the platform_allocate from platform.h
+    void* block = platform_allocate(size, false);  // passing in false for memory alignement for now, will come back too. //perform the platform_allocate from platform.h
     platform_zero_memory(block, size);             // set the newly created block to all zeros
     return block;
 }
@@ -68,7 +68,7 @@ void kfree(void* block, u64 size, memory_tag tag) {
 
     // TODO: memory alignment
     // remove block of memory
-    platform_free(block, FALSE);  // again just hard coding false for the memory alignemt, will come back
+    platform_free(block, false);  // again just hard coding false for the memory alignemt, will come back
 }
 
 // the next three are easy, they just call their platform specific counterparts, passing the same values
@@ -115,5 +115,5 @@ char* get_memory_usage_str() {
     }
     // calling this dynamically like this is not ideal, but since it will be used infrequently for debug stuff it should be ok
     char* out_string = string_duplicate(buffer);  // copies the string?
-    return out_string;                   // have to be careful with this.  have to free this everytime that this is called
+    return out_string;                            // have to be careful with this.  have to free this everytime that this is called
 }

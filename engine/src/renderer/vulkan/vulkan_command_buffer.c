@@ -89,8 +89,8 @@ void vulkan_command_buffer_allocate_and_begin_single_use(
     vulkan_context* context,                                                  // pass in the vulkan context
     VkCommandPool pool,                                                       // the pool that the command buffer belongs to
     vulkan_command_buffer* out_command_buffer) {                              // the command buffer being used
-    vulkan_command_buffer_allocate(context, pool, TRUE, out_command_buffer);  // call our function to allocate a command buffer, pass through the context and the pool, set to primary, and the command buffer we are using comes out
-    vulkan_command_buffer_begin(out_command_buffer, TRUE, FALSE, FALSE);      // call our function to begin a command buffer, give it the buffer, set single use to true, renderpass continue to false, and simulstaneous use to false
+    vulkan_command_buffer_allocate(context, pool, true, out_command_buffer);  // call our function to allocate a command buffer, pass through the context and the pool, set to primary, and the command buffer we are using comes out
+    vulkan_command_buffer_begin(out_command_buffer, true, false, false);      // call our function to begin a command buffer, give it the buffer, set single use to true, renderpass continue to false, and simulstaneous use to false
 }
 
 // ends recording, submits to and waits for queue operation and frees the provided command buffer

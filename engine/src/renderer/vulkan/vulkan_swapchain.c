@@ -60,14 +60,14 @@ b8 vulkan_swapchain_acquire_next_image_index(
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {  // if there was an error for out of date khr -- basically means that the swapchain needs to recreated
         // trigger swapchain recreation, then boot out of the render loop
         vulkan_swapchain_recreate(context, context->framebuffer_width, context->framebuffer_height, swapchain);  // swapchain recreate, pass in context, context framebuffer for the width and height, and the swap chain
-        return FALSE;                                                                                            // boot out
+        return false;                                                                                            // boot out
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {                                            // if result wasnt successful and wasnt suboptimal khr either
         KFATAL("Failed to acquire swapchain image!");                                                            // fatal message
-        return FALSE;                                                                                            // boot out
+        return false;                                                                                            // boot out
     }
 
     // if result was a succes
-    return TRUE;
+    return true;
 }
 
 // provides the presentation of the rendered to image - returns the image back to the swap chain after being rendered to
@@ -105,14 +105,14 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
     swapchain->max_frames_in_flight = 2;                                                    // may lower this if we need to, this means that we will be triple buffering. we will be able to render to 2 frames while a 3rd is being drawn. get higher framerates and such
 
     // choose a swap surface format
-    b8 found = FALSE;                                                              // create found set to false
+    b8 found = false;                                                              // create found set to false
     for (u32 i = 0; i < context->device.swapchain_support.format_count; ++i) {     // iterate through all of the swapchain formats
         VkSurfaceFormatKHR format = context->device.swapchain_support.formats[i];  // create vulkan surface format set to the value of swapchain formats[i]
         // preferred formats
         if (format.format == VK_FORMAT_B8G8R8A8_UNORM &&               // if the format contains format b8g8r8a8 unorm - meaning its bgra and 8 bits per channel
             format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {  // and color space rgb nonlinear - uses the color space srgb non linear
             swapchain->image_format = format;                          // set swapchain image format to format
-            found = TRUE;                                              // found is now true
+            found = true;                                              // found is now true
             break;
         }
     }
@@ -241,7 +241,7 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
         VK_IMAGE_TILING_OPTIMAL,                      // let gpu decide tiling
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,  // the usage
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,          // want to use gpu memory
-        TRUE,                                         // create a view
+        true,                                         // create a view
         VK_IMAGE_ASPECT_DEPTH_BIT,                    // use this for the depth buffer
         &swapchain->depth_attachment);                // where all this is stored
 
