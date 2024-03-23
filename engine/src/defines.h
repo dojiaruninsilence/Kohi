@@ -103,7 +103,10 @@ STATIC_ASSERT(sizeof(f64) == 8, "Expected f64 to be 8 bytes.");
                                                                       : value;
 
 // inlining
-#ifdef _MSC_VER
+#if defined(__clang__) || defined(__gcc__)
+#define KINLINE __attribute__((always_inline)) inline
+#define KNOINLINE __attribute__((noinline))
+#elif defined(_MSC_VER)
 #define KINLINE __forceinline           // removes the fuction call and just runs the code inside, which can help speed things up
 #define KNOINLINE __declspec(noinline)  // this one says do not do an inline for any reason
 #else

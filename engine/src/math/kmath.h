@@ -942,24 +942,24 @@ KINLINE vec3 mat4_downward(mat4 matrix) {
 // @param matrix the matrix from which to base the vector
 // @return a 3-component directional vector
 KINLINE vec3 mat4_left(mat4 matrix) {
-    vec3 right;                 // create a vec3 right
-    right.x = -matrix.data[0];  // get x value from negative matrix at index 2
-    right.y = -matrix.data[4];  // get y value from negative matrix at index 6
-    right.z = -matrix.data[8];  // get z value from negative matrix at index 10
-    vec3_normalize(&right);     // normalize the values recieved
-    return right;
-}
-
-// @brief returns a right vector relative to the provided matrix - for moving right and such based on the position and rotation the object is currently at - gives what the right value is
-// @param matrix the matrix from which to base the vector
-// @return a 3-component directional vector
-KINLINE vec3 mat4_right(mat4 matrix) {
     vec3 left;                 // create a vec3 left
     left.x = -matrix.data[0];  // get x value from negative matrix at index 2
     left.y = -matrix.data[4];  // get y value from negative matrix at index 6
     left.z = -matrix.data[8];  // get z value from negative matrix at index 10
     vec3_normalize(&left);     // normalize the values recieved
     return left;
+}
+
+// @brief returns a right vector relative to the provided matrix - for moving right and such based on the position and rotation the object is currently at - gives what the right value is
+// @param matrix the matrix from which to base the vector
+// @return a 3-component directional vector
+KINLINE vec3 mat4_right(mat4 matrix) {
+    vec3 right;                 // create a vec3 right
+    right.x = -matrix.data[0];  // get x value from negative matrix at index 2
+    right.y = -matrix.data[4];  // get y value from negative matrix at index 6
+    right.z = -matrix.data[8];  // get z value from negative matrix at index 10
+    vec3_normalize(&right);     // normalize the values recieved
+    return right;
 }
 
 // quaternions ------------------------------------------------------------------------------------------------------------------------------------------------
