@@ -23,4 +23,8 @@ typedef struct game {
 
     // game specific game state. created and managed by the game
     void* state;
+
+    // store a pointer to the application state -- makes sense to allocate all of this at the same time - pointer cause we dont want the game to actually have access to the application
+    void* application_state;
+    ;
 } game;

@@ -52,14 +52,14 @@ keys translate_keycode(u32 ns_keycode);
 
     if (self != nil) {
         state = init_state;
-        state->quit_flagged = FALSE;
+        state->quit_flagged = false;
     }
 
     return self;
 }
 
 - (BOOL)windowShouldClose:(id)sender {
-    state->quit_flagged = TRUE;
+    state->quit_flagged = true;
 
     event_context data = {};
     event_fire(EVENT_CODE_APPLICATION_QUIT, 0, data);
@@ -136,7 +136,7 @@ keys translate_keycode(u32 ns_keycode);
 }
 
 - (void)mouseDown:(NSEvent *)event {
-    input_process_button(BUTTON_LEFT, TRUE);
+    input_process_button(BUTTON_LEFT, true);
 }
 
 - (void)mouseDragged:(NSEvent *)event {
@@ -145,7 +145,7 @@ keys translate_keycode(u32 ns_keycode);
 }
 
 - (void)mouseUp:(NSEvent *)event {
-    input_process_button(BUTTON_LEFT, FALSE);
+    input_process_button(BUTTON_LEFT, false);
 }
 
 - (void)mouseMoved:(NSEvent *)event {
@@ -155,7 +155,7 @@ keys translate_keycode(u32 ns_keycode);
 }
 
 - (void)rightMouseDown:(NSEvent *)event {
-    input_process_button(BUTTON_RIGHT, TRUE);
+    input_process_button(BUTTON_RIGHT, true);
 }
 
 - (void)rightMouseDragged:(NSEvent *)event  {
@@ -164,12 +164,12 @@ keys translate_keycode(u32 ns_keycode);
 }
 
 - (void)rightMouseUp:(NSEvent *)event {
-    input_process_button(BUTTON_RIGHT, FALSE);
+    input_process_button(BUTTON_RIGHT, false);
 }
 
 - (void)otherMouseDown:(NSEvent *)event {
     // Interpreted as middle click
-    input_process_button(BUTTON_MIDDLE, TRUE);
+    input_process_button(BUTTON_MIDDLE, true);
 }
 
 - (void)otherMouseDragged:(NSEvent *)event {
@@ -179,13 +179,13 @@ keys translate_keycode(u32 ns_keycode);
 
 - (void)otherMouseUp:(NSEvent *)event {
     // Interpreted as middle click
-    input_process_button(BUTTON_MIDDLE, FALSE);
+    input_process_button(BUTTON_MIDDLE, false);
 }
 
 - (void)keyDown:(NSEvent *)event {
     keys key = translate_keycode((u32)[event keyCode]);
 
-    input_process_key(key, TRUE);
+    input_process_key(key, true);
 
     [self interpretKeyEvents:@[event]];
 }
@@ -193,7 +193,7 @@ keys translate_keycode(u32 ns_keycode);
 - (void)keyUp:(NSEvent *)event {
     keys key = translate_keycode((u32)[event keyCode]);
 
-    input_process_key(key, FALSE);
+    input_process_key(key, false);
 }
 
 - (void)scrollWheel:(NSEvent *)event {
@@ -213,7 +213,7 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 
 - (NSRange)markedRange {return kEmptyRange;}
 
-- (BOOL)hasMarkedText {return FALSE;}
+- (BOOL)hasMarkedText {return false;}
 
 - (nullable NSAttributedString *)attributedSubstringForProposedRange:(NSRange)range actualRange:(nullable NSRangePointer)actualRange {return nil;}
 
@@ -271,7 +271,7 @@ b8 platform_startup(
     state->app_delegate = [[ApplicationDelegate alloc] init];
     if (!state->app_delegate) {
         KERROR("Failed to create application delegate")
-        return FALSE;
+        return false;
     }
     [NSApp setDelegate:state->app_delegate];
 
@@ -279,7 +279,7 @@ b8 platform_startup(
     state->wnd_delegate = [[WindowDelegate alloc] initWithState:state];
     if (!state->wnd_delegate) {
         KERROR("Failed to create window delegate")
-        return FALSE;
+        return false;
     }
 
     // Window creation
@@ -290,7 +290,7 @@ b8 platform_startup(
         defer:NO];
     if (!state->window) {
         KERROR("Failed to create window");
-        return FALSE;
+        return false;
     }
 
     // Layer creation    
@@ -323,7 +323,7 @@ b8 platform_startup(
     [NSApp activateIgnoringOtherApps:YES];
     [state->window makeKeyAndOrderFront:nil];
 
-    return TRUE;
+    return true;
 
     } // autoreleasepool
 }
@@ -453,11 +453,11 @@ b8 platform_create_vulkan_surface(platform_state *plat_state, vulkan_context *co
         &state->surface);
     if (result != VK_SUCCESS) {
         KFATAL("Vulkan surface creation failed.");
-        return FALSE;
+        return false;
     }
 
     context->surface = state->surface;
-    return TRUE;
+    return true;
 }
 
 keys translate_keycode(u32 ns_keycode) { 

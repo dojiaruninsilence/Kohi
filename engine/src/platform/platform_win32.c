@@ -276,15 +276,37 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
         case WM_KEYUP:
-        case WM_SYSKEYUP: {  // commented out for now because dont have input management yet
+        case WM_SYSKEYUP: {
             // key pressed or released
             b8 pressed = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN);  // if either of these is true, then we are calling pressed true
             keys key = (u16)w_param;                                   // get the key code from w_param which contains the u16 key code
 
+            // check for left and right for keys that have both
+            // alt key
+            if (w_param == VK_MENU) {                  // if the key pressed was an alt key
+                if (GetKeyState(VK_RMENU) & 0x8000) {  // if right alt was pressed
+                    key = KEY_RALT;                    // key set to right alt
+                } else if (GetKeyState(VK_LMENU) & 0x8000) {  // if left alt was pressed
+                    key = KEY_LALT;                    // key set to left alt
+                }
+            } else if (w_param == VK_SHIFT) {                  // if the key pressed was an shift key
+                if (GetKeyState(VK_RSHIFT) & 0x8000) {  // if right shift was pressed
+                    key = KEY_RSHIFT;                    // key set to right shift
+                } else if (GetKeyState(VK_LSHIFT) & 0x8000) {  // if left shift was pressed
+                    key = KEY_LSHIFT;                    // key set to left shift
+                }
+            } else if (w_param == VK_CONTROL) {                  // if the key pressed was an control key
+                if (GetKeyState(VK_RCONTROL) & 0x8000) {  // if right control was pressed
+                    key = KEY_RCONTROL;                    // key set to control shift
+                } else if (GetKeyState(VK_LCONTROL) & 0x8000) {  // if left control was pressed
+                    key = KEY_LCONTROL;                    // key set to left control
+                }
+            }
+
             // pass to the input subsystem for processing
             input_process_key(key, pressed);
         } break;
-        case WM_MOUSEMOVE: {  // commented out for now because dont have input management yet
+        case WM_MOUSEMOVE: {
             // mouse move -- uses macros provided by windows to get the mouse posistion - l_param is a single interger with both x and y coords packed into it
             i32 x_position = GET_X_LPARAM(l_param);  // gets the x coord form the int
             i32 y_position = GET_Y_LPARAM(l_param);  // gets the y coord form the int

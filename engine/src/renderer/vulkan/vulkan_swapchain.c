@@ -102,7 +102,6 @@ void vulkan_swapchain_present(
 
 void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* swapchain) {  // take in a pointer to the context, the size(which will be the window size to start), and a pointer to the vulkan swapchain stuct
     VkExtent2D swapchain_extent = {width, height};                                          // info the swapchain needs when it is being created, takes in a width and a height
-    swapchain->max_frames_in_flight = 2;                                                    // may lower this if we need to, this means that we will be triple buffering. we will be able to render to 2 frames while a 3rd is being drawn. get higher framerates and such
 
     // choose a swap surface format
     b8 found = false;                                                              // create found set to false
@@ -155,6 +154,8 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
     if (context->device.swapchain_support.capabilities.maxImageCount > 0 && image_count > context->device.swapchain_support.capabilities.maxImageCount) {
         image_count = context->device.swapchain_support.capabilities.maxImageCount;
     }
+
+    swapchain->max_frames_in_flight = image_count - 1;  // set to image count minus one, which will almost always equal 2, this means that we will be triple buffering. we will be able to render to 2 frames while a 3rd is being drawn. get higher framerates and such
 
     // swapchain create info
     VkSwapchainCreateInfoKHR swapchain_create_info = {VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR};  // create the struct swapchain create info to store the info, and start with the vulkan swapchain cerat info

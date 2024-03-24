@@ -9,15 +9,43 @@
 
 // creating a simple logging system now will evolve as the project grows
 
-b8 initilize_logging() {
+// this is just a dummy logging state, will come back and correct
+typedef struct logger_system_state {
+    b8 initialized;
+} logger_system_state;
+
+// holds a private pointer to the logger system state - this willbe the only part of the state stored on the stack
+static logger_system_state* state_ptr;
+
+// initialize the logging system - pass a pointer to a u64 to store the size of memory needed to store the state, and a pointer to where the state info will be stored
+b8 initilize_logging(u64* memory_requirement, void* state) {
+    *memory_requirement = sizeof(logger_system_state);  // dereference memory requirement and set it equal to the size of the logger system state, - this always happens, this is required
+    if (state == 0) {                                   // if no pointer to a state is passed in
+        return true;                                    // stop here and boot out ruturning true
+    }
+
+    state_ptr = state;              // pass through the pointer
+    state_ptr->initialized = true;  // set the state to initialized
+
+        // test stuff TODO: will be removed
+    KFATAL("a test message: %f", 3.14f);
+    KERROR("a test message: %f", 3.14f);
+    KWARN("a test message: %f", 3.14f);
+    KINFO("a test message: %f", 3.14f);
+    KDEBUG("a test message: %f", 3.14f);
+    KTRACE("a test message: %f", 3.14f);
+
     // TODO: create log file.
     return true;
 }
 
-void shutdown_logging() {
+// shut down the logging system
+void shutdown_logging(void* state) {
     // TODO: cleanup logging/write queued entries
+    state_ptr = 0;  // all we are doing for now is resetting the state pointer
 }
 
+// sogging system output
 void log_output(log_level level, const char* message, ...) {
     const char* level_strings[6] = {"[FATAL]: ", "[ERROR]: ", "[WARN]:  ", "[INFO]:  ", "[DEBUG]: ", "[TRACE]: "};
     b8 is_error = level < LOG_LEVEL_WARN;  // is it error level or higher

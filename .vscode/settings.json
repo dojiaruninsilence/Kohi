@@ -8,7 +8,6 @@
     "editor.fontSize": 16,
     "editor.fontWeight": "1",
     "workbench.editor.showTabs": false,
-    "workbench.activityBar.visible": true,
     "workbench.colorCustomizations": {
         "editorCursor.foreground": "#00ff33",
         "editor.lineHighlightBackground": "#111144"
@@ -63,6 +62,8 @@
         "utility": "cpp",
         "kmemory.h": "c",
         "defines.h": "c",
-        "vulkan_types.inl": "c"
+        "vulkan_types.inl": "c",
+        "clock.h": "c",
+        "kstring.h": "c"
     }
 }

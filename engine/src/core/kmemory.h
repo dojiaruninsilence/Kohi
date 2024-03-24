@@ -7,6 +7,7 @@ typedef enum memory_tag {  // enum is for enumeration, need to look this up as w
     // for temporary use. should be assigned one of the below or have a new tag created.
     MEMORY_TAG_UNKNOWN,  // default
     MEMORY_TAG_ARRAY,
+    MEMORY_TAG_LINEAR_ALLOCATOR,
     MEMORY_TAG_DARRAY,
     MEMORY_TAG_DICT,
     MEMORY_TAG_RING_QUEUE,
@@ -26,8 +27,12 @@ typedef enum memory_tag {  // enum is for enumeration, need to look this up as w
     MEMORY_TAG_MAX_TAGS  // use this to itterate through all the tags - always has to be the last entry in the list
 } memory_tag;
 
-KAPI void initialize_memory();  // all sub systems need initializing
-KAPI void shutdown_memory();    // and a shutdown
+// run twice eveytime, first to get the memory required, then second to actually initialize the system
+// initialize the memory subsystem - pass in a pointer to where the memory requirements fiels is, and a pointer to where the state is going to be in memory, or a zero if getting the memory requirement
+KAPI void initialize_memory(u64* memory_requirement, void* state);  // all sub systems need initializing
+
+// shut down the memory subsystem
+KAPI void shutdown_memory(void* state);  // and a shutdown
 
 KAPI void* kallocate(u64 size, memory_tag tag);  // almost like a malloc - but takes in a memory_tag - and allows the engine and us to keep track
 
@@ -40,3 +45,5 @@ KAPI void* kcopy_memory(void* dest, const void* source, u64 size);  // will work
 KAPI void* kset_memory(void* dest, i32 value, u64 size);  // equivilent of memset
 
 KAPI char* get_memory_usage_str();  // mostly a debug function -- will print out useful statistics to the console
+
+KAPI u64 get_memory_alloc_count();  // a check to see how many allocations are being made

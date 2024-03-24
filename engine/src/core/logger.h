@@ -23,10 +23,14 @@ typedef enum log_level {
     LOG_LEVEL_TRACE = 5   // same as debug but for more verbose statements -- use sparingly
 } log_level;
 
-// do various things to stand system up
-b8 initilize_logging();  // create files and such coming back to
-void shutdown_logging();
+// do various things to stand system up - pass a pointer to a u64 to store the size of memory needed to store the state, and a pointer to where the state info will be stored
+// initialize the logging system - call twice, once with state zeroed to ge required memory size, then a second time passind allocated memory to state -- returns true on success, false if failed
+b8 initilize_logging(u64* memory_requirement, void* state);  // create files and such coming back to
 
+// shutdown the loggin system
+void shutdown_logging(void* state);
+
+// logger system output - takes in the log level(look above) , and message, and then a list of arguments
 KAPI void log_output(log_level level, const char* message, ...);  // need to look up, doesnt make a ton of sense.  gonna be where the logging funnels through
 
 // logs a fatal-level message

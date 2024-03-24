@@ -54,7 +54,7 @@ b8 vulkan_device_create(vulkan_context* context) {
     if (!transfer_shares_graphics_queue) {                                                                             // if transfer has a different queue
         index_count++;                                                                                                 // inrcrement the index count
     }                                                                                                                  //
-    u32 indices[index_count];                                                                                          // create an array of indices the size of the index count
+    u32 indices[32];                                                                                                   // create an array of indices the size of the max index count
     u8 index = 0;                                                                                                      // start at index zero
     indices[index++] = context->device.graphics_queue_index;                                                           // first element in the array will be the graphics queue index, increment index
     if (!present_shares_graphics_queue) {                                                                              // if present doesnt share the same queue as graphics
@@ -65,7 +65,7 @@ b8 vulkan_device_create(vulkan_context* context) {
     }
 
     // need to look all of this stuff up
-    VkDeviceQueueCreateInfo queue_create_infos[index_count];                       // vulkan function for creating an array of queue create information with an amount of the index count
+    VkDeviceQueueCreateInfo queue_create_infos[32];                                // vulkan function for creating an array of queue create information with an amount of the max index count
     for (u32 i = 0; i < index_count; ++i) {                                        // iterate through all of the queues and set the create infos
         queue_create_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;  // set the stype, he doesnt really talk about so look up
         queue_create_infos[i].queueFamilyIndex = indices[i];                       // set the queue family index to index i
@@ -314,7 +314,8 @@ b8 select_physical_device(vulkan_context* context) {
     }
 
     // if we do have devices retrieve those devices
-    VkPhysicalDevice physical_devices[physical_device_count];                                           // create an arrary of physical devices, with the length of physical device count
+    const u32 max_device_count = 32;                                                                    // create a variable to represent the maximum number of devices allowed
+    VkPhysicalDevice physical_devices[max_device_count];                                                // create an arrary of physical devices, with the length of the max physical device count
     VK_CHECK(vkEnumeratePhysicalDevices(context->instance, &physical_device_count, physical_devices));  // this time instaed of getting a list, we fill the list into the physical devices array
     for (u32 i = 0; i < physical_device_count; ++i) {
         // use these to determine if the device meets the criteria that we need
@@ -342,7 +343,7 @@ b8 select_physical_device(vulkan_context* context) {
                                                  // added per mac os support pull request ------------------------------------------------------------------------------------------------
 
 #if KPLATFORM_APPLE
-        requirements.discrete_gpu = FALSE;
+        requirements.discrete_gpu = false;
 #else
         // end of mac os support pull request ------------------------------------------------------------------------------------------------
         requirements.discrete_gpu = true;  // discrete gpu is required
@@ -460,7 +461,7 @@ b8 physical_device_meets_requirements(
     // obtain the queue family info from the device
     u32 queue_family_count = 0;                                                             // initialize queue family count with a value of 0
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, 0);               // get a count of the queue family properties
-    VkQueueFamilyProperties queue_families[queue_family_count];                             // build an array to hold the family properties
+    VkQueueFamilyProperties queue_families[32];                                             // build an array to hold the family properties - with the size of the maximum queue family count
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queue_family_count, queue_families);  // get the array of family properties
 
     // look at each queue and see what queues it supports

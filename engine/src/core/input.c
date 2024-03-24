@@ -49,6 +49,22 @@ void input_update(f64 delta_time) {
 
 // keyboard internal functions
 void input_process_key(keys key, b8 pressed) {  // takes in a key and whether it is pressed or not
+
+    // just a check to see if left and right keys are working
+    if (key == KEY_LALT) {
+        KINFO("left alt key is pressed");
+    } else if (key == KEY_RALT) {
+        KINFO("right alt key is pressed");
+    } else if (key == KEY_LSHIFT) {
+        KINFO("left shift key is pressed");
+    } else if (key == KEY_RSHIFT) {
+        KINFO("right shift key is pressed");
+    } else if (key == KEY_LCONTROL) {
+        KINFO("left control key is pressed");
+    } else if (key == KEY_RCONTROL) {
+        KINFO("right control key is pressed");
+    }
+
     // only handle this if the state has actually changed
     if (state.keyboard_current.keys[key] != pressed) {  // check to see if the state has actually changed
         // update internal state

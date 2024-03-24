@@ -1,6 +1,9 @@
 #include "game.h"
 
 #include <core/logger.h>
+#include <core/kmemory.h>
+
+#include <core/input.h>
 
 b8 game_initialize(game* game_inst) {
     KDEBUG("game initialize() called!")
@@ -8,6 +11,13 @@ b8 game_initialize(game* game_inst) {
 }
 
 b8 game_update(game* game_inst, f32 delta_time) {
+    static u64 alloc_count = 0;              // define alloc count - static variable scoped to this function
+    u64 prev_alloc_count = alloc_count;      // set previous alloc count to previous alloc count
+    alloc_count = get_memory_alloc_count();  // store the dynamic allocation count in alloc count
+    if (input_is_key_up('M') && input_was_key_down('M')) {
+        KDEBUG("allocations: %llu (%llu this frame", alloc_count, alloc_count - prev_alloc_count);
+    }
+
     return true;
 }
 
