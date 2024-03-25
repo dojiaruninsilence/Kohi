@@ -1,697 +1,590 @@
-#include "platform/platform.h"
+#include <platform/platform.h>
 
-#if defined(KPLATFORM_APPLE)
-
-#include "core/logger.h"
-#include "core/event.h"
-#include "core/input.h"
+#if KPLATFORM_APPLE
 
 #include "containers/darray.h"
+#include "core/event.h"
+#include "core/input.h"
+#include "core/kstring.h"
+#include "core/logger.h"
+#include "renderer/vulkan/vulkan_types.inl"  // For surface creation.
 
-#include <mach/mach_time.h>
-#include <crt_externs.h>
-
-#import <Foundation/Foundation.h>
-#import <Cocoa/Cocoa.h>
-#import <QuartzCore/QuartzCore.h>
-
-// For surface creation
-#define VK_USE_PLATFORM_METAL_EXT
+// Include Vulkan before GLFW.
 #include <vulkan/vulkan.h>
-#include "renderer/vulkan/vulkan_types.inl"
 
-@class ApplicationDelegate;
-@class WindowDelegate;
-@class ContentView;
-
-typedef struct internal_state {
-    ApplicationDelegate* app_delegate;
-    WindowDelegate* wnd_delegate;
-    NSWindow* window;
-    ContentView* view;
-    CAMetalLayer* layer;
-    VkSurfaceKHR surface;
-    b8 quit_flagged;
-} internal_state;
-
-// Key translation
-keys translate_keycode(u32 ns_keycode);
-
-@interface WindowDelegate : NSObject <NSWindowDelegate> {
-    internal_state* state;
-}
-
-- (instancetype)initWithState:(internal_state*)init_state;
-
-@end // WindowDelegate
-
-@implementation WindowDelegate
-
-- (instancetype)initWithState:(internal_state*)init_state {
-    self = [super init];
-
-    if (self != nil) {
-        state = init_state;
-        state->quit_flagged = false;
-    }
-
-    return self;
-}
-
-- (BOOL)windowShouldClose:(id)sender {
-    state->quit_flagged = true;
-
-    event_context data = {};
-    event_fire(EVENT_CODE_APPLICATION_QUIT, 0, data);
-
-    return YES;
-}
-
-- (void)windowDidResize:(NSNotification *)notification {
-    event_context context;
-    const NSRect contentRect = [state->view frame];
-    const NSRect framebufferRect = [state->view convertRectToBacking:contentRect];
-    context.data.u16[0] = (u16)framebufferRect.size.width;
-    context.data.u16[1] = (u16)framebufferRect.size.height;
-    event_fire(EVENT_CODE_RESIZED, 0, context);
-}
-
-- (void)windowDidMiniaturize:(NSNotification *)notification {
-    event_context context;
-    context.data.u16[0] = 0;
-    context.data.u16[1] = 0;
-    event_fire(EVENT_CODE_RESIZED, 0, context);
-
-    [state->window miniaturize:nil];
-}
-
-- (void)windowDidDeminiaturize:(NSNotification *)notification {
-    event_context context;
-    const NSRect contentRect = [state->view frame];
-    const NSRect framebufferRect = [state->view convertRectToBacking:contentRect];
-    context.data.u16[0] = (u16)framebufferRect.size.width;
-    context.data.u16[1] = (u16)framebufferRect.size.height;
-    event_fire(EVENT_CODE_RESIZED, 0, context);
-
-    [state->window deminiaturize:nil];
-}
-
-@end // WindowDelegate
-
-@interface ContentView : NSView <NSTextInputClient> {
-    NSWindow* window;
-    NSTrackingArea* trackingArea;
-    NSMutableAttributedString* markedText;
-}
-
-- (instancetype)initWithWindow:(NSWindow*)initWindow;
-
-@end // ContentView
-
-@implementation ContentView
-
-- (instancetype)initWithWindow:(NSWindow*)initWindow {
-    self = [super init];
-    if (self != nil) {
-        window = initWindow;
-    }
-
-    return self;
-}
-
-- (BOOL)canBecomeKeyView {
-    return YES;
-}
-
-- (BOOL)acceptsFirstResponder {
-    return YES;
-}
-
-- (BOOL)wantsUpdateLayer {
-    return YES;
-}
-
-- (BOOL)acceptsFirstMouse:(NSEvent *)event {
-    return YES;
-}
-
-- (void)mouseDown:(NSEvent *)event {
-    input_process_button(BUTTON_LEFT, true);
-}
-
-- (void)mouseDragged:(NSEvent *)event {
-    // Equivalent to moving the mouse for now
-    [self mouseMoved:event];
-}
-
-- (void)mouseUp:(NSEvent *)event {
-    input_process_button(BUTTON_LEFT, false);
-}
-
-- (void)mouseMoved:(NSEvent *)event {
-    const NSPoint pos = [event locationInWindow];
-
-    input_process_mouse_move((i16)pos.x, (i16)pos.y);
-}
-
-- (void)rightMouseDown:(NSEvent *)event {
-    input_process_button(BUTTON_RIGHT, true);
-}
-
-- (void)rightMouseDragged:(NSEvent *)event  {
-    // Equivalent to moving the mouse for now
-    [self mouseMoved:event];
-}
-
-- (void)rightMouseUp:(NSEvent *)event {
-    input_process_button(BUTTON_RIGHT, false);
-}
-
-- (void)otherMouseDown:(NSEvent *)event {
-    // Interpreted as middle click
-    input_process_button(BUTTON_MIDDLE, true);
-}
-
-- (void)otherMouseDragged:(NSEvent *)event {
-    // Equivalent to moving the mouse for now
-    [self mouseMoved:event];
-}
-
-- (void)otherMouseUp:(NSEvent *)event {
-    // Interpreted as middle click
-    input_process_button(BUTTON_MIDDLE, false);
-}
-
-- (void)keyDown:(NSEvent *)event {
-    keys key = translate_keycode((u32)[event keyCode]);
-
-    input_process_key(key, true);
-
-    [self interpretKeyEvents:@[event]];
-}
-
-- (void)keyUp:(NSEvent *)event {
-    keys key = translate_keycode((u32)[event keyCode]);
-
-    input_process_key(key, false);
-}
-
-- (void)scrollWheel:(NSEvent *)event {
-    input_process_mouse_wheel((i8)[event scrollingDeltaY]);
-}
-
-- (void)insertText:(id)string replacementRange:(NSRange)replacementRange {}
-
-- (void)setMarkedText:(id)string selectedRange:(NSRange)selectedRange replacementRange:(NSRange)replacementRange {}
-
-- (void)unmarkText {}
-
-// Defines a constant for empty ranges in NSTextInputClient
-static const NSRange kEmptyRange = { NSNotFound, 0 };
-
-- (NSRange)selectedRange {return kEmptyRange;}
-
-- (NSRange)markedRange {return kEmptyRange;}
-
-- (BOOL)hasMarkedText {return false;}
-
-- (nullable NSAttributedString *)attributedSubstringForProposedRange:(NSRange)range actualRange:(nullable NSRangePointer)actualRange {return nil;}
-
-- (NSArray<NSAttributedStringKey> *)validAttributesForMarkedText {return [NSArray array];}
-
-- (NSRect)firstRectForCharacterRange:(NSRange)range actualRange:(nullable NSRangePointer)actualRange {return NSMakeRect(0, 0, 0, 0);}
-
-- (NSUInteger)characterIndexForPoint:(NSPoint)point {return 0;}
-
-@end // ContentView
-
-@interface ApplicationDelegate : NSObject <NSApplicationDelegate> {}
-
-@end // ApplicationDelegate
-
-@implementation ApplicationDelegate
-
-- (void)applicationDidFinishLaunching:(NSNotification *)notification {
-    // Posting an empty event at start
-    @autoreleasepool {
-
-    NSEvent* event = [NSEvent otherEventWithType:NSEventTypeApplicationDefined
-                                        location:NSMakePoint(0, 0)
-                                   modifierFlags:0
-                                       timestamp:0
-                                    windowNumber:0
-                                         context:nil
-                                         subtype:0
-                                           data1:0
-                                           data2:0];
-    [NSApp postEvent:event atStart:YES];
-
-    } // autoreleasepool
-
-    [NSApp stop:nil];
-}
-
-@end // ApplicationDelegate
-
-b8 platform_startup(
-    platform_state *plat_state,
-    const char *application_name,
+#ifndef GLFW_INCLUDE_NONE
+#define GLFW_INCLUDE_NONE
+#endif
+#include <GLFW/glfw3.h>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+typedef struct platform_state {
+    GLFWwindow* glfw_window;
+    f64 start_time;
+} platform_state;
+
+static platform_state* state_ptr;
+
+static void platform_console_write_file(FILE* file, const char* message, u8 colour);
+
+static void platform_error_callback(int error, const char* description);
+static void platform_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+static void platform_mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
+static void platform_cursor_position_callback(GLFWwindow* window, f64 xpos, f64 ypos);
+static void platform_scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset);
+static void platform_framebuffer_size_callback(GLFWwindow* window, int width, int height);
+
+static keys translate_key(int key);
+
+b8 platform_system_startup(
+    u64* memory_requirement,
+    void* state,
+    const char* application_name,
     i32 x,
     i32 y,
     i32 width,
     i32 height) {
-    plat_state->internal_state = malloc(sizeof(internal_state));
-    internal_state* state = (internal_state*)plat_state->internal_state;
-
-    @autoreleasepool {
-
-    [NSApplication sharedApplication];
-
-    // App delegate creation
-    state->app_delegate = [[ApplicationDelegate alloc] init];
-    if (!state->app_delegate) {
-        KERROR("Failed to create application delegate")
-        return false;
+    *memory_requirement = sizeof(platform_state);
+    if (state == 0) {
+        return true;
     }
-    [NSApp setDelegate:state->app_delegate];
 
-    // Window delegate creation
-    state->wnd_delegate = [[WindowDelegate alloc] initWithState:state];
-    if (!state->wnd_delegate) {
-        KERROR("Failed to create window delegate")
+    state_ptr = state;
+
+    glfwSetErrorCallback(platform_error_callback);
+    if (!glfwInit()) {
+        KFATAL("Failed to initialise GLFW");
         return false;
     }
 
-    // Window creation
-    state->window = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(x, y, width, height)
-        styleMask:NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable
-        backing:NSBackingStoreBuffered
-        defer:NO];
-    if (!state->window) {
-        KERROR("Failed to create window");
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);  // Required for Vulkan.
+
+    state_ptr->glfw_window = glfwCreateWindow(width, height, application_name, 0, 0);
+    if (!state_ptr->glfw_window) {
+        KFATAL("Failed to create a window");
+        glfwTerminate();
         return false;
     }
 
-    // Layer creation    
-    state->layer = [CAMetalLayer layer];
-    if (!state->layer) {
-        KERROR("Failed to create layer for view");
-    }
+    glfwSetKeyCallback(state_ptr->glfw_window, platform_key_callback);
+    glfwSetMouseButtonCallback(state_ptr->glfw_window, platform_mouse_button_callback);
+    glfwSetCursorPosCallback(state_ptr->glfw_window, platform_cursor_position_callback);
+    glfwSetScrollCallback(state_ptr->glfw_window, platform_scroll_callback);
+    glfwSetFramebufferSizeCallback(state_ptr->glfw_window, platform_framebuffer_size_callback);
 
-    // View creation
-    state->view = [[ContentView alloc] initWithWindow:state->window];
-    [state->view setLayer:state->layer];
-    [state->view setWantsLayer:YES];
-
-    // Setting window properties
-    [state->window setLevel:NSNormalWindowLevel];
-    [state->window setContentView:state->view];
-    [state->window makeFirstResponder:state->view];
-    [state->window setTitle:@(application_name)];
-    [state->window setDelegate:state->wnd_delegate];
-    [state->window setAcceptsMouseMovedEvents:YES];
-    [state->window setRestorable:NO];
-
-    if (![[NSRunningApplication currentApplication] isFinishedLaunching])
-        [NSApp run];
-
-    // Making the app a proper UI app since we're unbundled
-    [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-
-    // Putting window in front on launch
-    [NSApp activateIgnoringOtherApps:YES];
-    [state->window makeKeyAndOrderFront:nil];
+    glfwSetWindowPos(state_ptr->glfw_window, x, y);
+    glfwShowWindow(state_ptr->glfw_window);
+    state_ptr->start_time = glfwGetTime();
 
     return true;
-
-    } // autoreleasepool
 }
 
-void platform_shutdown(platform_state *plat_state) {
-    // Simply cold-cast to the known type.
-    internal_state* state = (internal_state*)plat_state->internal_state;
+void platform_system_shutdown(void* platform_state) {
+    if (state_ptr) {
+        glfwDestroyWindow(state_ptr->glfw_window);
+        state_ptr->glfw_window = 0;
 
-    @autoreleasepool {
-
-    if (state->app_delegate) {
-        [NSApp setDelegate:nil];
-        [state->app_delegate release];
-        state->app_delegate = nil;
+        glfwSetErrorCallback(0);
+        glfwTerminate();
     }
-
-    if (state->wnd_delegate) {
-        [state->window setDelegate:nil];
-        [state->wnd_delegate release];
-        state->wnd_delegate = nil;
-    }
-
-    if (state->view) {
-        [state->view release];
-        state->view = nil;
-    }
-
-    if (state->window) {
-        [state->window close];
-        state->window = nil;
-    }
-
-    }
+    state_ptr = 0;
 }
 
-b8 platform_pump_messages(platform_state *plat_state) {
-    // Simply cold-cast to the known type.
-    internal_state* state = (internal_state*)plat_state->internal_state;
-
-    @autoreleasepool {
-
-    NSEvent* event;
-
-    for (;;) {
-        event = [NSApp 
-            nextEventMatchingMask:NSEventMaskAny
-            untilDate:[NSDate distantPast]
-            inMode:NSDefaultRunLoopMode
-            dequeue:YES];
-
-        if (!event)
-            break;
-
-        [NSApp sendEvent:event];
+b8 platform_pump_messages() {
+    if (state_ptr) {
+        glfwPollEvents();
+        b8 should_continue = !glfwWindowShouldClose(state_ptr->glfw_window);
+        return should_continue;
     }
-
-    } // autoreleasepool
-
-    return !state->quit_flagged;
+    return true;
 }
 
 void* platform_allocate(u64 size, b8 aligned) {
     return malloc(size);
 }
 
-void platform_free(void *block, b8 aligned) {
+void platform_free(void* block, b8 aligned) {
     free(block);
 }
 
-void* platform_zero_memory(void *block, u64 size) {
+void* platform_zero_memory(void* block, u64 size) {
     return memset(block, 0, size);
 }
 
-void* platform_copy_memory(void *dest, const void *source, u64 size) {
+void* platform_copy_memory(void* dest, const void* source, u64 size) {
     return memcpy(dest, source, size);
 }
 
-void* platform_set_memory(void *dest, i32 value, u64 size) {
+void* platform_set_memory(void* dest, i32 value, u64 size) {
     return memset(dest, value, size);
 }
 
-void platform_console_write(const char *message, u8 colour) {
-    // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-    const char* colour_strings[] = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
-    printf("\033[%sm%s\033[0m", colour_strings[colour], message);
+void platform_console_write(const char* message, u8 colour) {
+    platform_console_write_file(stdout, message, colour);
 }
 
-void platform_console_write_error(const char *message, u8 colour) {
-    // FATAL,ERROR,WARN,INFO,DEBUG,TRACE
-    const char* colour_strings[] = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
-    printf("\033[%sm%s\033[0m", colour_strings[colour], message);
+void platform_console_write_error(const char* message, u8 colour) {
+    platform_console_write_file(stderr, message, colour);
 }
 
-f64 platform_get_absolute_time() {
-    return mach_absolute_time();
+static void platform_console_write_file(FILE* file, const char* message, u8 colour) {
+    // Colours: FATAL, ERROR, WARN, INFO, DEBUG, TRACE.
+    const char* colour_strings[] = {"0;41", "1;31", "1;33", "1;32", "1;34", "1;30"};
+    fprintf(file, "\033[%sm%s\033[0m", colour_strings[colour], message);
+}
+
+f64 platform_get_absolute_time(void) {
+    f64 time = glfwGetTime();
+    return time;
 }
 
 void platform_sleep(u64 ms) {
-#if _POSIX_C_SOURCE >= 199309L
-    struct timespec ts;
-    ts.tv_sec = ms / 1000;
-    ts.tv_nsec = (ms % 1000) * 1000 * 1000;
+    struct timespec ts = {0};
+    ts.tv_sec = (long)((f64)ms * 0.001);
+    ts.tv_nsec = ((long)ms % 1000) * 1000 * 1000;
     nanosleep(&ts, 0);
-#else
-    if (ms >= 1000) {
-        sleep(ms / 1000);
+}
+
+void platform_get_required_extension_names(const char*** names_darray) {
+    u32 count = 0;
+    const char** extensions = glfwGetRequiredInstanceExtensions(&count);
+    for (u32 i = 0; i < count; ++i) {
+        if (strings_equal(extensions[i], "VK_KHR_surface")) {
+            // We already include "VK_KHR_surface", so skip this.
+            continue;
+        }
+        darray_push(*names_darray, extensions[i]);
     }
-    usleep((ms % 1000) * 1000);
-#endif
 }
 
-void platform_get_required_extension_names(const char ***names_darray) {
-    darray_push(*names_darray, &"VK_EXT_metal_surface");
-}
+b8 platform_create_vulkan_surface(platform_state* plat_state, vulkan_context* context) {
+    if (!state_ptr) {
+        return false;
+    }
 
-b8 platform_create_vulkan_surface(platform_state *plat_state, vulkan_context *context) {
-    // Simply cold-cast to the known type.
-    internal_state *state = (internal_state *)plat_state->internal_state;
-
-    VkMetalSurfaceCreateInfoEXT create_info = {VK_STRUCTURE_TYPE_METAL_SURFACE_CREATE_INFO_EXT};
-    create_info.pLayer = state->layer;
-
-    VkResult result = vkCreateMetalSurfaceEXT(
-        context->instance, 
-        &create_info,
-        context->allocator,
-        &state->surface);
+    VkResult result = glfwCreateWindowSurface(context->instance, state_ptr->glfw_window, 0, &context->surface);
     if (result != VK_SUCCESS) {
         KFATAL("Vulkan surface creation failed.");
         return false;
     }
 
-    context->surface = state->surface;
     return true;
 }
 
-keys translate_keycode(u32 ns_keycode) { 
-    switch (ns_keycode) {
-        case 0x1D:
-            return KEY_NUMPAD0;
-        case 0x12:
-            return KEY_NUMPAD1;
-        case 0x13:
-            return KEY_NUMPAD2;
-        case 0x14:
-            return KEY_NUMPAD3;
-        case 0x15:
-            return KEY_NUMPAD4;
-        case 0x17:
-            return KEY_NUMPAD5;
-        case 0x16:
-            return KEY_NUMPAD6;
-        case 0x1A:
-            return KEY_NUMPAD7;
-        case 0x1C:
-            return KEY_NUMPAD8;
-        case 0x19:
-            return KEY_NUMPAD9;
+static void platform_error_callback(int error, const char* description) {
+    platform_console_write_error(description, 0);
+}
 
-        case 0x00:
-            return KEY_A;
-        case 0x0B:
-            return KEY_B;
-        case 0x08:
-            return KEY_C;
-        case 0x02:
-            return KEY_D;
-        case 0x0E:
-            return KEY_E;
-        case 0x03:
-            return KEY_F;
-        case 0x05:
-            return KEY_G;
-        case 0x04:
-            return KEY_H;
-        case 0x22:
-            return KEY_I;
-        case 0x26:
-            return KEY_J;
-        case 0x28:
-            return KEY_K;
-        case 0x25:
-            return KEY_L;
-        case 0x2E:
-            return KEY_M;
-        case 0x2D:
-            return KEY_N;
-        case 0x1F:
-            return KEY_O;
-        case 0x23:
-            return KEY_P;
-        case 0x0C:
-            return KEY_Q;
-        case 0x0F:
-            return KEY_R;
-        case 0x01:
-            return KEY_S;
-        case 0x11:
-            return KEY_T;
-        case 0x20:
-            return KEY_U;
-        case 0x09:
-            return KEY_V;
-        case 0x0D:
-            return KEY_W;
-        case 0x07:
-            return KEY_X;
-        case 0x10:
-            return KEY_Y;
-        case 0x06:
-            return KEY_Z;
-
-        case 0x27:
-            return KEYS_MAX_KEYS; // Apostrophe
-        case 0x2A:
-            return KEYS_MAX_KEYS; // Backslash
-        case 0x2B:
-            return KEY_COMMA;
-        case 0x18:
-            return KEYS_MAX_KEYS; // Equal
-        case 0x32:
-            return KEY_GRAVE;
-        case 0x21:
-            return KEYS_MAX_KEYS; // Left bracket
-        case 0x1B:
-            return KEY_MINUS;
-        case 0x2F:
-            return KEY_PERIOD;
-        case 0x1E:
-            return KEYS_MAX_KEYS; // Right bracket
-        case 0x29:
-            return KEY_SEMICOLON;
-        case 0x2C:
-            return KEY_SLASH;
-        case 0x0A:
-            return KEYS_MAX_KEYS; // ?
-
-        case 0x33:
-            return KEY_BACKSPACE;
-        case 0x39:
-            return KEY_CAPITAL;
-        case 0x75:
-            return KEY_DELETE;
-        case 0x7D:
-            return KEY_DOWN;
-        case 0x77:
-            return KEY_END;
-        case 0x24:
-            return KEY_ENTER;
-        case 0x35:
-            return KEY_ESCAPE;
-        case 0x7A:
-            return KEY_F1;
-        case 0x78:
-            return KEY_F2;
-        case 0x63:
-            return KEY_F3;
-        case 0x76:
-            return KEY_F4;
-        case 0x60:
-            return KEY_F5;
-        case 0x61:
-            return KEY_F6;
-        case 0x62:
-            return KEY_F7;
-        case 0x64:
-            return KEY_F8;
-        case 0x65:
-            return KEY_F9;
-        case 0x6D:
-            return KEY_F10;
-        case 0x67:
-            return KEY_F11;
-        case 0x6F:
-            return KEY_F12;
-        case 0x69:
-            return KEY_PRINT;
-        case 0x6B:
-            return KEY_F14;
-        case 0x71:
-            return KEY_F15;
-        case 0x6A:
-            return KEY_F16;
-        case 0x40:
-            return KEY_F17;
-        case 0x4F:
-            return KEY_F18;
-        case 0x50:
-            return KEY_F19;
-        case 0x5A:
-            return KEY_F20;
-        case 0x73:
-            return KEY_HOME;
-        case 0x72:
-            return KEY_INSERT;
-        case 0x7B:
-            return KEY_LEFT;
-        case 0x3A:
-            return KEY_LMENU;
-        case 0x3B:
-            return KEY_LCONTROL;
-        case 0x38:
-            return KEY_LSHIFT;
-        case 0x37:
-            return KEY_LWIN;
-        case 0x6E:
-            return KEYS_MAX_KEYS; // Menu
-        case 0x47:
-            return KEY_NUMLOCK;
-        case 0x79:
-            return KEYS_MAX_KEYS; // Page down
-        case 0x74:
-            return KEYS_MAX_KEYS; // Page up
-        case 0x7C:
-            return KEY_RIGHT;
-        case 0x3D:
-            return KEY_RMENU;
-        case 0x3E:
-            return KEY_RCONTROL;
-        case 0x3C:
-            return KEY_RSHIFT;
-        case 0x36:
-            return KEY_RWIN;
-        case 0x31:
-            return KEY_SPACE;
-        case 0x30:
-            return KEY_TAB;
-        case 0x7E:
-            return KEY_UP;
-
-        case 0x52:
-            return KEY_NUMPAD0;
-        case 0x53:
-            return KEY_NUMPAD1;
-        case 0x54:
-            return KEY_NUMPAD2;
-        case 0x55:
-            return KEY_NUMPAD3;
-        case 0x56:
-            return KEY_NUMPAD4;
-        case 0x57:
-            return KEY_NUMPAD5;
-        case 0x58:
-            return KEY_NUMPAD6;
-        case 0x59:
-            return KEY_NUMPAD7;
-        case 0x5B:
-            return KEY_NUMPAD8;
-        case 0x5C:
-            return KEY_NUMPAD9;
-        case 0x45:
-            return KEY_ADD;
-        case 0x41:
-            return KEY_DECIMAL;
-        case 0x4B:
-            return KEY_DIVIDE;
-        case 0x4C:
-            return KEY_ENTER;
-        case 0x51:
-            return KEY_NUMPAD_EQUAL;
-        case 0x43:
-            return KEY_MULTIPLY;
-        case 0x4E:
-            return KEY_SUBTRACT;
-
-        default:
-            return KEYS_MAX_KEYS;
+static void platform_key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    keys our_key = translate_key(key);
+    if (our_key != KEYS_MAX_KEYS) {
+        b8 pressed = action == GLFW_PRESS || action == GLFW_REPEAT;
+        input_process_key(our_key, pressed);
     }
 }
 
-#endif // SLN_PLATFORM_MACOS
+static void platform_mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+    buttons mouse_button = BUTTON_MAX_BUTTONS;
+
+    switch (button) {
+        case GLFW_MOUSE_BUTTON_LEFT:
+            mouse_button = BUTTON_LEFT;
+            break;
+        case GLFW_MOUSE_BUTTON_MIDDLE:
+            mouse_button = BUTTON_MIDDLE;
+            break;
+        case GLFW_MOUSE_BUTTON_RIGHT:
+            mouse_button = BUTTON_RIGHT;
+            break;
+        default:
+            mouse_button = BUTTON_MAX_BUTTONS;
+    }
+
+    if (mouse_button != BUTTON_MAX_BUTTONS) {
+        b8 pressed = action == GLFW_PRESS;
+        input_process_button(mouse_button, pressed);
+    }
+}
+
+static void platform_cursor_position_callback(GLFWwindow* window, f64 xpos, f64 ypos) {
+    input_process_mouse_move((i16)xpos, (i16)ypos);
+}
+
+static void platform_scroll_callback(GLFWwindow* window, f64 xoffset, f64 yoffset) {
+    // We ignore horizontal scroll and also flatten to OS-independent values (-1, +1).
+    i8 z_delta = (i8)yoffset;
+    if (z_delta != 0) {
+        z_delta = (z_delta < 0) ? -1 : 1;
+    }
+    input_process_mouse_wheel(z_delta);
+}
+
+static void platform_framebuffer_size_callback(GLFWwindow* window, int width, int height) {
+    event_context context = {.data.u16[0] = (u16)width, .data.u16[1] = (u16)height};
+    event_fire(EVENT_CODE_RESIZED, 0, context);
+}
+
+static keys translate_key(int key) {
+    keys our_key = KEYS_MAX_KEYS;
+
+    switch (key) {
+        case GLFW_KEY_SPACE:
+            our_key = KEY_SPACE;
+            break;
+        case GLFW_KEY_COMMA:
+            our_key = KEY_COMMA;
+            break;
+        case GLFW_KEY_MINUS:
+            our_key = KEY_MINUS;
+            break;
+        case GLFW_KEY_PERIOD:
+            our_key = KEY_PERIOD;
+            break;
+        case GLFW_KEY_SLASH:
+            our_key = KEY_SLASH;
+            break;
+        case GLFW_KEY_0:
+            our_key = KEY_NUMPAD0;
+            break;
+        case GLFW_KEY_1:
+            our_key = KEY_NUMPAD1;
+            break;
+        case GLFW_KEY_2:
+            our_key = KEY_NUMPAD2;
+            break;
+        case GLFW_KEY_3:
+            our_key = KEY_NUMPAD3;
+            break;
+        case GLFW_KEY_4:
+            our_key = KEY_NUMPAD4;
+            break;
+        case GLFW_KEY_5:
+            our_key = KEY_NUMPAD5;
+            break;
+        case GLFW_KEY_6:
+            our_key = KEY_NUMPAD6;
+            break;
+        case GLFW_KEY_7:
+            our_key = KEY_NUMPAD7;
+            break;
+        case GLFW_KEY_8:
+            our_key = KEY_NUMPAD8;
+            break;
+        case GLFW_KEY_9:
+            our_key = KEY_NUMPAD9;
+            break;
+        case GLFW_KEY_SEMICOLON:
+            our_key = KEY_SEMICOLON;
+            break;
+        case GLFW_KEY_EQUAL:
+            our_key = KEY_PLUS;
+            break;
+        case GLFW_KEY_A:
+            our_key = KEY_A;
+            break;
+        case GLFW_KEY_B:
+            our_key = KEY_B;
+            break;
+        case GLFW_KEY_C:
+            our_key = KEY_C;
+            break;
+        case GLFW_KEY_D:
+            our_key = KEY_D;
+            break;
+        case GLFW_KEY_E:
+            our_key = KEY_E;
+            break;
+        case GLFW_KEY_F:
+            our_key = KEY_F;
+            break;
+        case GLFW_KEY_G:
+            our_key = KEY_G;
+            break;
+        case GLFW_KEY_H:
+            our_key = KEY_H;
+            break;
+        case GLFW_KEY_I:
+            our_key = KEY_I;
+            break;
+        case GLFW_KEY_J:
+            our_key = KEY_J;
+            break;
+        case GLFW_KEY_K:
+            our_key = KEY_K;
+            break;
+        case GLFW_KEY_L:
+            our_key = KEY_L;
+            break;
+        case GLFW_KEY_M:
+            our_key = KEY_M;
+            break;
+        case GLFW_KEY_N:
+            our_key = KEY_N;
+            break;
+        case GLFW_KEY_O:
+            our_key = KEY_O;
+            break;
+        case GLFW_KEY_P:
+            our_key = KEY_P;
+            break;
+        case GLFW_KEY_Q:
+            our_key = KEY_Q;
+            break;
+        case GLFW_KEY_R:
+            our_key = KEY_R;
+            break;
+        case GLFW_KEY_S:
+            our_key = KEY_S;
+            break;
+        case GLFW_KEY_T:
+            our_key = KEY_T;
+            break;
+        case GLFW_KEY_U:
+            our_key = KEY_U;
+            break;
+        case GLFW_KEY_V:
+            our_key = KEY_V;
+            break;
+        case GLFW_KEY_W:
+            our_key = KEY_W;
+            break;
+        case GLFW_KEY_X:
+            our_key = KEY_X;
+            break;
+        case GLFW_KEY_Y:
+            our_key = KEY_Y;
+            break;
+        case GLFW_KEY_Z:
+            our_key = KEY_Z;
+            break;
+        case GLFW_KEY_GRAVE_ACCENT:
+            our_key = KEY_GRAVE;
+            break;
+        case GLFW_KEY_ESCAPE:
+            our_key = KEY_ESCAPE;
+            break;
+        case GLFW_KEY_ENTER:
+            our_key = KEY_ENTER;
+            break;
+        case GLFW_KEY_TAB:
+            our_key = KEY_TAB;
+            break;
+        case GLFW_KEY_BACKSPACE:
+            our_key = KEY_BACKSPACE;
+            break;
+        case GLFW_KEY_INSERT:
+            our_key = KEY_INSERT;
+            break;
+        case GLFW_KEY_DELETE:
+            our_key = KEY_DELETE;
+            break;
+        case GLFW_KEY_RIGHT:
+            our_key = KEY_RIGHT;
+            break;
+        case GLFW_KEY_LEFT:
+            our_key = KEY_LEFT;
+            break;
+        case GLFW_KEY_DOWN:
+            our_key = KEY_DOWN;
+            break;
+        case GLFW_KEY_UP:
+            our_key = KEY_UP;
+            break;
+        case GLFW_KEY_PAGE_UP:
+            our_key = KEY_PRIOR;
+            break;
+        case GLFW_KEY_PAGE_DOWN:
+            our_key = KEY_NEXT;
+            break;
+        case GLFW_KEY_HOME:
+            our_key = KEY_HOME;
+            break;
+        case GLFW_KEY_END:
+            our_key = KEY_END;
+            break;
+        case GLFW_KEY_CAPS_LOCK:
+            our_key = KEY_CAPITAL;
+            break;
+        case GLFW_KEY_SCROLL_LOCK:
+            our_key = KEY_SCROLL;
+            break;
+        case GLFW_KEY_NUM_LOCK:
+            our_key = KEY_NUMLOCK;
+            break;
+        case GLFW_KEY_PRINT_SCREEN:
+            our_key = KEY_SNAPSHOT;
+            break;
+        case GLFW_KEY_PAUSE:
+            our_key = KEY_PAUSE;
+            break;
+        case GLFW_KEY_F1:
+            our_key = KEY_F1;
+            break;
+        case GLFW_KEY_F2:
+            our_key = KEY_F2;
+            break;
+        case GLFW_KEY_F3:
+            our_key = KEY_F3;
+            break;
+        case GLFW_KEY_F4:
+            our_key = KEY_F4;
+            break;
+        case GLFW_KEY_F5:
+            our_key = KEY_F5;
+            break;
+        case GLFW_KEY_F6:
+            our_key = KEY_F6;
+            break;
+        case GLFW_KEY_F7:
+            our_key = KEY_F7;
+            break;
+        case GLFW_KEY_F8:
+            our_key = KEY_F8;
+            break;
+        case GLFW_KEY_F9:
+            our_key = KEY_F9;
+            break;
+        case GLFW_KEY_F10:
+            our_key = KEY_F10;
+            break;
+        case GLFW_KEY_F11:
+            our_key = KEY_F11;
+            break;
+        case GLFW_KEY_F12:
+            our_key = KEY_F12;
+            break;
+        case GLFW_KEY_F13:
+            our_key = KEY_F13;
+            break;
+        case GLFW_KEY_F14:
+            our_key = KEY_F14;
+            break;
+        case GLFW_KEY_F15:
+            our_key = KEY_F15;
+            break;
+        case GLFW_KEY_F16:
+            our_key = KEY_F16;
+            break;
+        case GLFW_KEY_F17:
+            our_key = KEY_F17;
+            break;
+        case GLFW_KEY_F18:
+            our_key = KEY_F18;
+            break;
+        case GLFW_KEY_F19:
+            our_key = KEY_F19;
+            break;
+        case GLFW_KEY_F20:
+            our_key = KEY_F20;
+            break;
+        case GLFW_KEY_F21:
+            our_key = KEY_F21;
+            break;
+        case GLFW_KEY_F22:
+            our_key = KEY_F22;
+            break;
+        case GLFW_KEY_F23:
+            our_key = KEY_F23;
+            break;
+        case GLFW_KEY_F24:
+            our_key = KEY_F24;
+            break;
+        case GLFW_KEY_KP_0:
+            our_key = KEY_NUMPAD0;
+            break;
+        case GLFW_KEY_KP_1:
+            our_key = KEY_NUMPAD1;
+            break;
+        case GLFW_KEY_KP_2:
+            our_key = KEY_NUMPAD2;
+            break;
+        case GLFW_KEY_KP_3:
+            our_key = KEY_NUMPAD3;
+            break;
+        case GLFW_KEY_KP_4:
+            our_key = KEY_NUMPAD4;
+            break;
+        case GLFW_KEY_KP_5:
+            our_key = KEY_NUMPAD5;
+            break;
+        case GLFW_KEY_KP_6:
+            our_key = KEY_NUMPAD6;
+            break;
+        case GLFW_KEY_KP_7:
+            our_key = KEY_NUMPAD7;
+            break;
+        case GLFW_KEY_KP_8:
+            our_key = KEY_NUMPAD8;
+            break;
+        case GLFW_KEY_KP_9:
+            our_key = KEY_NUMPAD9;
+            break;
+        case GLFW_KEY_KP_DECIMAL:
+            our_key = KEY_DECIMAL;
+            break;
+        case GLFW_KEY_KP_DIVIDE:
+            our_key = KEY_DIVIDE;
+            break;
+        case GLFW_KEY_KP_MULTIPLY:
+            our_key = KEY_MULTIPLY;
+            break;
+        case GLFW_KEY_KP_SUBTRACT:
+            our_key = KEY_SUBTRACT;
+            break;
+        case GLFW_KEY_KP_ADD:
+            our_key = KEY_ADD;
+            break;
+        case GLFW_KEY_KP_ENTER:
+            our_key = KEY_ENTER;
+            break;
+        case GLFW_KEY_KP_EQUAL:
+            our_key = KEY_NUMPAD_EQUAL;
+            break;
+        case GLFW_KEY_LEFT_SHIFT:
+            our_key = KEY_LSHIFT;
+            break;
+        case GLFW_KEY_LEFT_CONTROL:
+            our_key = KEY_LCONTROL;
+            break;
+        case GLFW_KEY_LEFT_ALT:
+            our_key = KEY_LMENU;
+            break;
+        case GLFW_KEY_LEFT_SUPER:
+            our_key = KEY_LWIN;
+            break;
+        case GLFW_KEY_RIGHT_SHIFT:
+            our_key = KEY_RSHIFT;
+            break;
+        case GLFW_KEY_RIGHT_CONTROL:
+            our_key = KEY_RCONTROL;
+            break;
+        case GLFW_KEY_RIGHT_ALT:
+            our_key = KEY_RMENU;
+            break;
+        case GLFW_KEY_RIGHT_SUPER:
+            our_key = KEY_RWIN;
+            break;
+        default:
+            // GLFW_KEY_UNKNOWN
+            // GLFW_KEY_LAST
+            // GLFW_KEY_APOSTROPHE
+            // GLFW_KEY_LEFT_BRACKET
+            // GLFW_KEY_BACKSLASH
+            // GLFW_KEY_RIGHT_BRACKET
+            // GLFW_KEY_F25
+            // GLFW_KEY_WORLD_1
+            // GLFW_KEY_WORLD_2
+            // GLFW_KEY_MENU
+            our_key = KEYS_MAX_KEYS;
+    }
+
+    return our_key;
+}
+
+#endif  // KPLATFORM_APPLE

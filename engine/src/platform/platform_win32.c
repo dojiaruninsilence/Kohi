@@ -22,42 +22,49 @@
 #include "renderer/vulkan/vulkan_types.inl"
 
 // windows specific state
-typedef struct internal_state {
+typedef struct platform_state {
     HINSTANCE h_instance;  // handle to the instance of the application
     HWND hwnd;             // handle to the window
     VkSurfaceKHR surface;  // vulkan needs a surface to render to. add it to the windows internal state. surface will be retrieved from the windowing system
-} internal_state;
 
-// clock
-static f64 clock_frequency;       // multiplier for the clock cycles from OS and multiply by this to get the actual time
-static LARGE_INTEGER start_time;  // starting time of the application
+    // clock
+    f64 clock_frequency;       // multiplier for the clock cycles from OS and multiply by this to get the actual time
+    LARGE_INTEGER start_time;  // starting time of the application
+} platform_state;
+
+static platform_state *state_ptr;  // store a poiter to where the platform state is being held
 
 // foreward declaration - he calls this windows specific mumbojumbo.
 LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param);  // win 32 process message- takes in a window
 
 // implementation of platform startup for win32
-b8 platform_startup(
-    platform_state *plat_state,
-    const char *application_name,
-    i32 x,
-    i32 y,
-    i32 width,
-    i32 height) {
-    plat_state->internal_state = malloc(sizeof(internal_state));           // i believe this is allocating memory on the heap for the internal state
-    internal_state *state = (internal_state *)plat_state->internal_state;  // he called this cold casting, if it doesnt come up again need to look this up
-
-    state->h_instance = GetModuleHandleA(0);  // save current module handle to h_instance
+// initialize the platform subsystem, - always call twice - on first pass pass in the memory requirement to get the memory required, and zero for the state
+// on the second pass - pass in the state as well as the memory rewuirement and actually initialize the subsystem
+b8 platform_system_startup(
+    u64 *memory_requirement,                       // pointer to where the memory requirement field is held
+    void *state,                                   // pointer to where the state is being held
+    const char *application_name,                  // the name of the application, if windowed will be the window title
+    i32 x,                                         // x pos
+    i32 y,                                         // y pos
+    i32 width,                                     // width
+    i32 height) {                                  // height
+    *memory_requirement = sizeof(platform_state);  // de reference the memory requirement and set it to the size of the platform state
+    if (state == 0) {                              // if no state input
+        return true;                               // boot out here
+    }
+    state_ptr = state;                            // pass the pointer to where the state is being held
+    state_ptr->h_instance = GetModuleHandleA(0);  // use a windows function to get a pointer to the handle to the instance
 
     // NOTE: at some point i am going to read throught the microsoft documentation and learn all of this stuff - search for WNDCLASSA  and that will lead me in the right direction
     // Setup and register the window class
-    HICON icon = LoadIcon(state->h_instance, IDI_APPLICATION);  // i believe this would be a personal icon, for kohi
-    WNDCLASSA wc;                                               // declare widow class
-    memset(&wc, 0, sizeof(wc));                                 // allocate the memory for the window class and zero it out
-    wc.style = CS_DBLCLKS;                                      // get double clicks -- can pass more flags in here
-    wc.lpfnWndProc = win32_process_message;                     // pointer to the window procedure. basically what handles event within the system
+    HICON icon = LoadIcon(state_ptr->h_instance, IDI_APPLICATION);  // i believe this would be a personal icon, for kohi
+    WNDCLASSA wc;                                                   // declare widow class
+    memset(&wc, 0, sizeof(wc));                                     // allocate the memory for the window class and zero it out
+    wc.style = CS_DBLCLKS;                                          // get double clicks -- can pass more flags in here
+    wc.lpfnWndProc = win32_process_message;                         // pointer to the window procedure. basically what handles event within the system
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
-    wc.hInstance = state->h_instance;  // point to h_instance
+    wc.hInstance = state_ptr->h_instance;  // point to h_instance
     wc.hIcon = icon;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);  // NULL; // manage the cursor manually - we will handle the cursor
     wc.hbrBackground = NULL;                   // transparent
@@ -106,7 +113,7 @@ b8 platform_startup(
     HWND handle = CreateWindowExA(
         window_ex_style, "kohi_window_class", application_name,         // application_name becomes the title on the window
         window_style, window_x, window_y, window_width, window_height,  // declared and resized above
-        0, 0, state->h_instance, 0);
+        0, 0, state_ptr->h_instance, 0);
 
     // here is a check point to make sure that everything has worked properly so far - if not the application cannot proceed
     if (handle == 0) {
@@ -115,7 +122,7 @@ b8 platform_startup(
         KFATAL("Window creation failed!");  // fatal level log message
         return false;
     } else {
-        state->hwnd = handle;  // update the state objects window handle to handle
+        state_ptr->hwnd = handle;  // update the state objects window handle to handle
     }
 
     // now we need to display the window - this can be complicated
@@ -124,36 +131,34 @@ b8 platform_startup(
     i32 show_window_command_flags = should_activate ? SW_SHOW : SW_SHOWNOACTIVATE;  // switch whether the window can accept inputs
     // if initially minimized, use  SW_MINIMIZE : SW_SHOWMINNOACTIVE;
     // if initially maximized, use SW_SHOWMAXIMIZED : SW_MAXIMIZE
-    ShowWindow(state->hwnd, show_window_command_flags);  // show window pass in the handle and the flags
+    ShowWindow(state_ptr->hwnd, show_window_command_flags);  // show window pass in the handle and the flags
 
     // clock setup -- setting the start time
-    LARGE_INTEGER frequency;                          // declare
-    QueryPerformanceFrequency(&frequency);            // set using this function - gets from the speed of the processor
-    clock_frequency = 1.0 / (f64)frequency.QuadPart;  // 1 divided by frequency, which is converted to a 64 bit floating point integer
-    QueryPerformanceCounter(&start_time);             // gives us a snapshot of the current time
+    LARGE_INTEGER frequency;                                     // declare
+    QueryPerformanceFrequency(&frequency);                       // set using this function - gets from the speed of the processor
+    state_ptr->clock_frequency = 1.0 / (f64)frequency.QuadPart;  // 1 divided by frequency, which is converted to a 64 bit floating point integer
+    QueryPerformanceCounter(&state_ptr->start_time);             // gives us a snapshot of the current time
 
     return true;  // successfully initialized the platform
 }
 
-void platform_shutdown(platform_state *plat_state) {
-    // simply cold-cast to the known type. again with this, really need to look up - possibly meaning it is in an uninitialized state. dont know still
-    internal_state *state = (internal_state *)plat_state->internal_state;
-
-    // check to see if there is a window, if there is destroy it. using the window handle as a reference
-    if (state->hwnd) {
-        DestroyWindow(state->hwnd);  // destroy window then set to zero
-        state->hwnd = 0;
+// shut down the platform system, pass in a pointer to the state
+void platform_system_shutdown(void *plat_state) {
+    if (state_ptr && state_ptr->hwnd) {  // if there is a state, and it contains a window handle
+        DestroyWindow(state_ptr->hwnd);  // destroy the window, pass it the handle
+        state_ptr->hwnd = 0;             // reset the pointer to the handle
     }
 }
 
 // secondary message handling loop - neccassary for some platform stuff
-b8 platform_pump_messages(platform_state *plat_state) {
-    MSG message;                                             // windows processes messages in a stack, so that means that they get dealt with one at a time
-    while (PeekMessageA(&message, NULL, 0, 0, PM_REMOVE)) {  // if there is a message on the top of the stack take it and remove it to clear it, too many and window wil be unresponsive, while loop runs constantly looking for messages
-        TranslateMessage(&message);                          // perform a translation on the message
-        DispatchMessageA(&message);                          // dispatch by whatever method is defined in the wc.lpfnWndProc setting above
+b8 platform_pump_messages() {
+    if (state_ptr) {
+        MSG message;                                             // windows processes messages in a stack, so that means that they get dealt with one at a time
+        while (PeekMessageA(&message, NULL, 0, 0, PM_REMOVE)) {  // if there is a message on the top of the stack take it and remove it to clear it, too many and window wil be unresponsive, while loop runs constantly looking for messages
+            TranslateMessage(&message);                          // perform a translation on the message
+            DispatchMessageA(&message);                          // dispatch by whatever method is defined in the wc.lpfnWndProc setting above
+        }
     }
-
     return true;  // when there are no messages returns true
 }
 
@@ -211,9 +216,12 @@ void platform_console_write_error(const char *message, u8 colour) {
 
 // there is more setup for this function above
 f64 platform_get_absolute_time() {
-    LARGE_INTEGER now_time;                           // declare
-    QueryPerformanceCounter(&now_time);               // gives us a snapshot of the current time compared to the start time - number of cycles dince the application started
-    return (f64)now_time.QuadPart * clock_frequency;  //  number of cycles dince the application started times the speed of the processor gives us actual time passed and returns that value
+    if (state_ptr) {
+        LARGE_INTEGER now_time;                                      // declare
+        QueryPerformanceCounter(&now_time);                          // gives us a snapshot of the current time compared to the start time - number of cycles dince the application started
+        return (f64)now_time.QuadPart * state_ptr->clock_frequency;  //  number of cycles dince the application started times the speed of the processor gives us actual time passed and returns that value
+    }
+    return 0;
 }
 
 // not much to do on this for now
@@ -227,21 +235,22 @@ void platform_get_required_extension_names(const char ***names_darray) {
 }
 
 // surface creation for vulkan -- exposes too much vulkan code to the platform, but going to use for now, will probably change
-b8 platform_create_vulkan_surface(platform_state *plat_state, vulkan_context *context) {
-    // Simply cold-cast to the known type.
-    internal_state *state = (internal_state *)plat_state->internal_state;
+b8 platform_create_vulkan_surface(vulkan_context *context) {
+    if (!state_ptr) {
+        return false;
+    }
 
     VkWin32SurfaceCreateInfoKHR create_info = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};  // create the info needed to create the new surface
-    create_info.hinstance = state->h_instance;                                                    // input a poiter to handel instance into surface info
-    create_info.hwnd = state->hwnd;                                                               // input a pointer to the window handle into surface info
+    create_info.hinstance = state_ptr->h_instance;                                                // input a poiter to handel instance into surface info
+    create_info.hwnd = state_ptr->hwnd;                                                           // input a pointer to the window handle into surface info
 
-    VkResult result = vkCreateWin32SurfaceKHR(context->instance, &create_info, context->allocator, &state->surface);  // create the window surface using the surface info and allocate memory and store results in result
-    if (result != VK_SUCCESS) {                                                                                       // if it succeeded
+    VkResult result = vkCreateWin32SurfaceKHR(context->instance, &create_info, context->allocator, &state_ptr->surface);  // create the window surface using the surface info and allocate memory and store results in result
+    if (result != VK_SUCCESS) {                                                                                           // if it succeeded
         KFATAL("Vulkan surface creation failed.");
         return false;
     }
 
-    context->surface = state->surface;
+    context->surface = state_ptr->surface;
     return true;
 }  // this is where i left off, the video is at -----------------> 7 49<----------------------------- video #015
 
@@ -283,23 +292,23 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
 
             // check for left and right for keys that have both
             // alt key
-            if (w_param == VK_MENU) {                  // if the key pressed was an alt key
-                if (GetKeyState(VK_RMENU) & 0x8000) {  // if right alt was pressed
-                    key = KEY_RALT;                    // key set to right alt
+            if (w_param == VK_MENU) {                         // if the key pressed was an alt key
+                if (GetKeyState(VK_RMENU) & 0x8000) {         // if right alt was pressed
+                    key = KEY_RALT;                           // key set to right alt
                 } else if (GetKeyState(VK_LMENU) & 0x8000) {  // if left alt was pressed
-                    key = KEY_LALT;                    // key set to left alt
+                    key = KEY_LALT;                           // key set to left alt
                 }
             } else if (w_param == VK_SHIFT) {                  // if the key pressed was an shift key
-                if (GetKeyState(VK_RSHIFT) & 0x8000) {  // if right shift was pressed
-                    key = KEY_RSHIFT;                    // key set to right shift
+                if (GetKeyState(VK_RSHIFT) & 0x8000) {         // if right shift was pressed
+                    key = KEY_RSHIFT;                          // key set to right shift
                 } else if (GetKeyState(VK_LSHIFT) & 0x8000) {  // if left shift was pressed
-                    key = KEY_LSHIFT;                    // key set to left shift
+                    key = KEY_LSHIFT;                          // key set to left shift
                 }
             } else if (w_param == VK_CONTROL) {                  // if the key pressed was an control key
-                if (GetKeyState(VK_RCONTROL) & 0x8000) {  // if right control was pressed
-                    key = KEY_RCONTROL;                    // key set to control shift
+                if (GetKeyState(VK_RCONTROL) & 0x8000) {         // if right control was pressed
+                    key = KEY_RCONTROL;                          // key set to control shift
                 } else if (GetKeyState(VK_LCONTROL) & 0x8000) {  // if left control was pressed
-                    key = KEY_LCONTROL;                    // key set to left control
+                    key = KEY_LCONTROL;                          // key set to left control
                 }
             }
 

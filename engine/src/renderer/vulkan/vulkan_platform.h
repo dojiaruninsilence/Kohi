@@ -6,9 +6,7 @@
 struct platform_state;
 struct vulkan_context;
 
-b8 platform_create_vulkan_surface(      // vulkan needs a surface to render to, this will come from the windowing system, the os
-    struct platform_state* plat_state,  // takes in a pointer to the platform state
-    struct vulkan_context* context);    // as well as the vulkan context
+b8 platform_create_vulkan_surface(struct vulkan_context* context);  // vulkan needs a surface to render to, this will come from the windowing system, the os  pass in the vulkan context
 
 // these will be defined in the respective platform.c files in the platform folder, like all other platform specific stuffs
 // appends the names of required extensions for this platform to the names_darray, which should be created and passed in

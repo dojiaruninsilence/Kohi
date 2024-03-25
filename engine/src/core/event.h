@@ -29,8 +29,10 @@ typedef struct event_context {
 typedef b8 (*PFN_on_event)(u16 code, void* sender, void* listener_inst, event_context data);  // pfn - pointer function. takes in number that ids message explicitly, pointer to the sender, pass the listener instance, then the data
 
 // initialize and shutdown the system - not exported, for engine only
-b8 event_initialize();
-void event_shutdown();
+// initialize the event subsystem, - always call twice - on first pass pass in the memory requirement to get the memory required, and zero for the state
+// on the second pass - pass in the state as well as the memory rewuirement and actually initialize the subsystem
+void event_system_initialize(u64* memory_requirement, void* state);
+void event_system_shutdown(void* state);
 
 // register to the listener for when events are sent with the provided code.  events with duplicate listener/callback combos will not be registered again and will cause this to return false
 // @param code the evet code to listen for

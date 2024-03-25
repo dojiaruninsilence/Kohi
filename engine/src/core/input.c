@@ -21,30 +21,35 @@ typedef struct input_state {
     mouse_state mouse_previous;
 } input_state;
 
-// internal input state
-static b8 initialized = false;  // keep track of if it has been initialized
-static input_state state = {};
+// define a pointer to the input syste state -- all we are storing on the stack for now is a pointer to the allocation
+static input_state* state_ptr;
 
-void input_initialize() {
-    kzero_memory(&state, sizeof(input_state));  // just going extra here
-    initialized = true;
+// initialize the input subsystem, - always call twice - on first pass pass in the memory requirement to get the memory required, and zero for the state
+// on the second pass - pass in the state as well as the memory rewuirement and actually initialize the subsystem
+void input_system_initialize(u64* memory_requirement, void* state) {
+    *memory_requirement = sizeof(input_state);  // dereference the memory requirement and input the size of the input system state
+    if (state == 0) {                           // if no state was passed in
+        return;                                 // boot out
+    }
+    kzero_memory(state, sizeof(input_state));  // to be sure zero out the memory  pass in the size of the state and a pointer to it
+    state_ptr = state;                         // pass the pointer throgh to state ptr
     KINFO("Input subsystem initialized");
 }
 
-void input_shutdown() {
+void input_system_shutdown(void* state) {
     // TODO: add shutdown routines when needed -- some of the inputs on other devices are much more complex
-    initialized = false;  // left off here the video is at 15 32
+    state_ptr = 0;  // all we are doing for now is reseting the state ptr
 }
 
 // this is called every frame
 void input_update(f64 delta_time) {
-    if (!initialized) {
+    if (!state_ptr) {
         return;
     }
 
     // copy current states to previous states
-    kcopy_memory(&state.keyboard_previous, &state.keyboard_current, sizeof(keyboard_state));
-    kcopy_memory(&state.mouse_previous, &state.mouse_current, sizeof(mouse_state));
+    kcopy_memory(&state_ptr->keyboard_previous, &state_ptr->keyboard_current, sizeof(keyboard_state));
+    kcopy_memory(&state_ptr->mouse_previous, &state_ptr->mouse_current, sizeof(mouse_state));
 }
 
 // keyboard internal functions
@@ -66,9 +71,9 @@ void input_process_key(keys key, b8 pressed) {  // takes in a key and whether it
     }
 
     // only handle this if the state has actually changed
-    if (state.keyboard_current.keys[key] != pressed) {  // check to see if the state has actually changed
+    if (state_ptr->keyboard_current.keys[key] != pressed) {  // check to see if the state has actually changed
         // update internal state
-        state.keyboard_current.keys[key] = pressed;  // so if they arent equal then set them to equal
+        state_ptr->keyboard_current.keys[key] = pressed;  // so if they arent equal then set them to equal
 
         // fire off an event for immediate processing
         event_context context;                                                               // create event context
@@ -80,8 +85,8 @@ void input_process_key(keys key, b8 pressed) {  // takes in a key and whether it
 // mouse internal functions
 void input_process_button(buttons button, b8 pressed) {
     // if the state has changed, fire an event
-    if (state.mouse_current.buttons[button] != pressed) {  // check to see if the state has actually changed
-        state.mouse_current.buttons[button] = pressed;     // if they have changed set current button to pressed
+    if (state_ptr->mouse_current.buttons[button] != pressed) {  // check to see if the state has actually changed
+        state_ptr->mouse_current.buttons[button] = pressed;     // if they have changed set current button to pressed
 
         // fire the event
         event_context context;                                                                     // create event context
@@ -92,13 +97,13 @@ void input_process_button(buttons button, b8 pressed) {
 
 void input_process_mouse_move(i16 x, i16 y) {
     // only process if actually different
-    if (state.mouse_current.x != x || state.mouse_current.y != y) {  // check to see if either of the positions have changed
+    if (state_ptr->mouse_current.x != x || state_ptr->mouse_current.y != y) {  // check to see if either of the positions have changed
         // NOTE: enable this if debugging.
         // KDEBUG("Mouse pos: %i, %i!", x, y);
 
         // update internal state
-        state.mouse_current.x = x;  // if these have changed then set current to the new values
-        state.mouse_current.y = y;
+        state_ptr->mouse_current.x = x;  // if these have changed then set current to the new values
+        state_ptr->mouse_current.y = y;
 
         // fire the event
         event_context context;    // create the context
@@ -119,78 +124,78 @@ void input_process_mouse_wheel(i8 z_delta) {
 
 // keyboard user available functions --- these were all pretty straight foreward and i was tired so i didnt take many notes. this was in video #009 near the end of it 23 mins and before
 b8 input_is_key_down(keys key) {
-    if (!initialized) {  // if not initialized wont have a valid state
+    if (!state_ptr) {  // if not initialized wont have a valid state
         return false;
     }
-    return state.keyboard_current.keys[key] == true;
+    return state_ptr->keyboard_current.keys[key] == true;
 }
 
 b8 input_is_key_up(keys key) {
-    if (!initialized) {  // if not initialized wont have a valid state
+    if (!state_ptr) {  // if not initialized wont have a valid state
         return true;
     }
-    return state.keyboard_current.keys[key] == false;
+    return state_ptr->keyboard_current.keys[key] == false;
 }
 
 b8 input_was_key_down(keys key) {
-    if (!initialized) {  // if not initialized wont have a valid state
+    if (!state_ptr) {  // if not initialized wont have a valid state
         return false;
     }
-    return state.keyboard_previous.keys[key] == true;
+    return state_ptr->keyboard_previous.keys[key] == true;
 }
 
 b8 input_was_key_up(keys key) {
-    if (!initialized) {  // if not initialized wont have a valid state
+    if (!state_ptr) {  // if not initialized wont have a valid state
         return true;
     }
-    return state.keyboard_previous.keys[key] == false;
+    return state_ptr->keyboard_previous.keys[key] == false;
 }
 
 // mouse user availabel functions
 b8 input_is_button_down(buttons button) {
-    if (!initialized) {
+    if (!state_ptr) {
         return false;
     }
-    return state.mouse_current.buttons[button] == true;
+    return state_ptr->mouse_current.buttons[button] == true;
 }
 
 b8 input_is_button_up(buttons button) {
-    if (!initialized) {
+    if (!state_ptr) {
         return true;
     }
-    return state.mouse_current.buttons[button] == false;
+    return state_ptr->mouse_current.buttons[button] == false;
 }
 
 b8 input_was_button_down(buttons button) {
-    if (!initialized) {
+    if (!state_ptr) {
         return false;
     }
-    return state.mouse_previous.buttons[button] == true;
+    return state_ptr->mouse_previous.buttons[button] == true;
 }
 
 b8 input_was_button_up(buttons button) {
-    if (!initialized) {
+    if (!state_ptr) {
         return true;
     }
-    return state.mouse_previous.buttons[button] == false;
+    return state_ptr->mouse_previous.buttons[button] == false;
 }
 
 void input_get_mouse_position(i32* x, i32* y) {
-    if (!initialized) {
+    if (!state_ptr) {
         *x = 0;
         *y = 0;
         return;
     }
-    *x = state.mouse_current.x;
-    *y = state.mouse_current.y;
+    *x = state_ptr->mouse_current.x;
+    *y = state_ptr->mouse_current.y;
 }
 
 void input_get_previous_mouse_position(i32* x, i32* y) {
-    if (!initialized) {
+    if (!state_ptr) {
         *x = 0;
         *y = 0;
         return;
     }
-    *x = state.mouse_previous.x;
-    *y = state.mouse_previous.y;
+    *x = state_ptr->mouse_previous.x;
+    *y = state_ptr->mouse_previous.y;
 }

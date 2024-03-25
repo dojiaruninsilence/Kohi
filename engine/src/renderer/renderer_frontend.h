@@ -2,13 +2,10 @@
 
 #include "renderer_types.inl"
 
-// foreward declarations
-struct static_mesh_data;
-struct platform_state;
-
-// every subsystem needs these
-b8 renderer_initialize(const char* application_name, struct platform_state* plat_state);  // takes in pointers to the application name and the platform state
-void renderer_shutdown();
+// initialize the renderer subsystem, - always call twice - on first pass pass in the memory requirement to get the memory required, and zero for the state
+// on the second pass - pass in the state as well as the memory rewuirement and actually initialize the subsystem, also pass in a pointer to the application name
+b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* application_name);  // takes in pointers to the application name and the platform state
+void renderer_system_shutdown(void* state);
 
 void renderer_on_resized(u16 width, u16 height);  // may change the structure of this later, keeping it simple for now
 

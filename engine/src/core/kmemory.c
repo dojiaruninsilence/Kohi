@@ -40,10 +40,11 @@ typedef struct memory_system_state {
     u64 alloc_count;            // keep track of the number of dynamic allocations made
 } memory_system_state;
 
-static memory_system_state* state_ptr;  // define a pointer to where the memory state is going to be stored -- to privately track it in the memory system
+// define a pointer to where the memory state is going to be stored -- to privately track it in the memory system
+static memory_system_state* state_ptr;
 
 // initialize the memory subsystem- pass in a pointer to the where memory reuirements for the state will be stored, and a pointer to the where the memory for the state will be, 0 for the first run to get the size requirements
-void initialize_memory(u64* memory_requirement, void* state) {
+void memory_system_initialize(u64* memory_requirement, void* state) {
     *memory_requirement = sizeof(memory_system_state);  // dereference the memory requirement and set it too the size of the memory system state
     if (state == 0) {                                   // if no state pointer is passed in, just grab the size requirement
         return;                                         // and boot out
@@ -55,7 +56,7 @@ void initialize_memory(u64* memory_requirement, void* state) {
 }
 
 // shutdown the memory subsystem, just pass it the pointer to the state
-void shutdown_memory(void* state) {
+void memory_system_shutdown(void* state) {
     state_ptr = 0;  // just going to reset the state pointer for now
 }
 
@@ -82,8 +83,10 @@ void kfree(void* block, u64 size, memory_tag tag) {
         KWARN("kfree called using MEMORY_TAG_UNKNOWN. re class this allocation.");  // let us know if the tag is unknown, will still be valid but we should know so we can fix it
     }
 
-    state_ptr->stats.tolal_allocated -= size;          // remove the size passed in from total allocated stats
-    state_ptr->stats.tagged_allocations[tag] -= size;  // remove the size passed in from tagged allocations at index of tag
+    if (state_ptr) {
+        state_ptr->stats.tolal_allocated -= size;          // remove the size passed in from total allocated stats
+        state_ptr->stats.tagged_allocations[tag] -= size;  // remove the size passed in from tagged allocations at index of tag
+    }
 
     // TODO: memory alignment
     // remove block of memory

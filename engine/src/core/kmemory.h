@@ -29,10 +29,10 @@ typedef enum memory_tag {  // enum is for enumeration, need to look this up as w
 
 // run twice eveytime, first to get the memory required, then second to actually initialize the system
 // initialize the memory subsystem - pass in a pointer to where the memory requirements fiels is, and a pointer to where the state is going to be in memory, or a zero if getting the memory requirement
-KAPI void initialize_memory(u64* memory_requirement, void* state);  // all sub systems need initializing
+KAPI void memory_system_initialize(u64* memory_requirement, void* state);  // all sub systems need initializing
 
 // shut down the memory subsystem
-KAPI void shutdown_memory(void* state);  // and a shutdown
+KAPI void memory_system_shutdown(void* state);  // and a shutdown
 
 KAPI void* kallocate(u64 size, memory_tag tag);  // almost like a malloc - but takes in a memory_tag - and allows the engine and us to keep track
 

@@ -145,8 +145,11 @@ typedef enum keys {
     KEYS_MAX_KEYS
 } keys;
 
-void input_initialize();  // these two are standard in all the systems
-void input_shutdown();
+// initialize the input subsystem, - always call twice - on first pass pass in the memory requirement to get the memory required, and zero for the state
+// on the second pass - pass in the state as well as the memory rewuirement and actually initialize the subsystem
+void input_system_initialize(u64* memory_requirement, void* state);
+void input_system_shutdown(void* state);
+
 void input_update(f64 delta_time);  // this will be called once per frame. delta may or may not be needed
 
 // keyboard input functions - exported cause they will be needed in the game code

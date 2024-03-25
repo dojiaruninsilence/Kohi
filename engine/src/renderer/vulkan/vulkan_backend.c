@@ -40,7 +40,7 @@ void create_command_buffers(renderer_backend* backend);                         
 void regenerate_framebuffers(renderer_backend* backend, vulkan_swapchain* swapchain, vulkan_renderpass* renderpass);  // private function to create/regenerate framebuffers, pass in pointers to the backend, the swapchain, and the renderpass - going to hook all these together
 b8 recreate_swapchain(renderer_backend* backend);                                                                     // private function to recreate the swapchain, just takes in a pointer to the backend
 
-b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* application_name, struct platform_state* plat_state) {
+b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* application_name) {
     // function pointers
     context.find_memory_index = find_memory_index;
 
@@ -152,8 +152,8 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
 
     // vulkan surface creation
     KDEBUG("Creating Vulkan surface...");
-    if (!platform_create_vulkan_surface(plat_state, &context)) {  // create surface, and check to see if it worked
-        KERROR("Failed to create platform surface!");             // let us know if it failed
+    if (!platform_create_vulkan_surface(&context)) {   // create surface, and check to see if it worked
+        KERROR("Failed to create platform surface!");  // let us know if it failed
         return false;
     }
     KDEBUG("Vulkan surface created.");

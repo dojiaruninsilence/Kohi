@@ -11,10 +11,9 @@ typedef enum renderer_backend_type {
 // one of the places object oriented programing makes sense
 // represents the renderer backend
 typedef struct renderer_backend {
-    struct platform_state* plat_state;  // needs to know about the platform state -- foreward declaration so that we dont need to use the header file
-    u64 frame_number;                   // keep track of the frames rendered
+    u64 frame_number;  // keep track of the frames rendered
 
-    b8 (*initialize)(struct renderer_backend* backend, const char* application_name, struct platform_state* plat_state);  // funtion ptr called initialize, takes in a ptr to a renderer backend, pointer to the application name, and a ponter to the platform state
+    b8 (*initialize)(struct renderer_backend* backend, const char* application_name);  // funtion ptr called initialize, takes in a ptr to a renderer backend, pointer to the application name
 
     void (*shutdown)(struct renderer_backend* backend);  // function ptr shutdown, takes in the pointer to the renderer backend
 

@@ -2,15 +2,14 @@
 
 #include "vulkan/vulkan_backend.h"
 
-b8 renderer_backend_create(renderer_backend_type type, struct platform_state* plat_state, renderer_backend* out_renderer_backend) {
-    out_renderer_backend->plat_state = plat_state;  // set the created platform state to the state passed in
-
-    if (type == RENDERER_BACKEND_TYPE_VULKAN) {  // if using the vulkan backend then set the pointer funtions to these
-        out_renderer_backend->initialize = vulkan_renderer_backend_initialize;
-        out_renderer_backend->shutdown = vulkan_renderer_backend_shutdown;
-        out_renderer_backend->begin_frame = vulkan_renderer_backend_begin_frame;
-        out_renderer_backend->end_frame = vulkan_renderer_backend_end_frame;
-        out_renderer_backend->resized = vulkan_renderer_backend_on_resized;
+// create the renderer back end -
+b8 renderer_backend_create(renderer_backend_type type, renderer_backend* out_renderer_backend) {
+    if (type == RENDERER_BACKEND_TYPE_VULKAN) {                                   // if using the vulkan backend then set the pointer funtions to these
+        out_renderer_backend->initialize = vulkan_renderer_backend_initialize;    // pointer to the initialize function
+        out_renderer_backend->shutdown = vulkan_renderer_backend_shutdown;        // pointer to the shutdown function
+        out_renderer_backend->begin_frame = vulkan_renderer_backend_begin_frame;  // pointer to the begin frame function
+        out_renderer_backend->end_frame = vulkan_renderer_backend_end_frame;      // pointer to the end frame function
+        out_renderer_backend->resized = vulkan_renderer_backend_on_resized;       // pointer to the on resized function
 
         return true;
     }

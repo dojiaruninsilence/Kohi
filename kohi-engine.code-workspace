@@ -51,7 +51,9 @@
 			"vulkan_platform.h": "c",
 			"renderer_frontend.h": "c",
 			"xiosbase": "cpp",
-			"ios": "cpp"
+			"ios": "cpp",
+			"iosfwd": "c",
+			"xlocbuf": "c"
 		}
 	}
 }
