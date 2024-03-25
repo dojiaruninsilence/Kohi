@@ -27,15 +27,24 @@ typedef struct platform_state {
     HWND hwnd;             // handle to the window
     VkSurfaceKHR surface;  // vulkan needs a surface to render to. add it to the windows internal state. surface will be retrieved from the windowing system
 
-    // clock
-    f64 clock_frequency;       // multiplier for the clock cycles from OS and multiply by this to get the actual time
-    LARGE_INTEGER start_time;  // starting time of the application
 } platform_state;
 
 static platform_state *state_ptr;  // store a poiter to where the platform state is being held
 
+// clock
+static f64 clock_frequency;       // multiplier for the clock cycles from OS and multiply by this to get the actual time
+static LARGE_INTEGER start_time;  // starting time of the application
+
 // foreward declaration - he calls this windows specific mumbojumbo.
 LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARAM l_param);  // win 32 process message- takes in a window
+
+// setup a clock -- a high resloution timer
+void clock_setup() {
+    LARGE_INTEGER frequency;                          // define a large int frequency
+    QueryPerformanceFrequency(&frequency);            // retrieve the frequency of the performance counter  - gets from the speed of the processor
+    clock_frequency = 1.0 / (f64)frequency.QuadPart;  // caluculates the clock frequency by taking the reciprocal of the frequency obtained from QueryPerformanceFrequency
+    QueryPerformanceCounter(&start_time);             // retrieves the current value of the performance counter and stores it in the variable start time gives us a snapshot of the current time
+}
 
 // implementation of platform startup for win32
 // initialize the platform subsystem, - always call twice - on first pass pass in the memory requirement to get the memory required, and zero for the state
@@ -134,10 +143,7 @@ b8 platform_system_startup(
     ShowWindow(state_ptr->hwnd, show_window_command_flags);  // show window pass in the handle and the flags
 
     // clock setup -- setting the start time
-    LARGE_INTEGER frequency;                                     // declare
-    QueryPerformanceFrequency(&frequency);                       // set using this function - gets from the speed of the processor
-    state_ptr->clock_frequency = 1.0 / (f64)frequency.QuadPart;  // 1 divided by frequency, which is converted to a 64 bit floating point integer
-    QueryPerformanceCounter(&state_ptr->start_time);             // gives us a snapshot of the current time
+    clock_setup();
 
     return true;  // successfully initialized the platform
 }
@@ -216,12 +222,12 @@ void platform_console_write_error(const char *message, u8 colour) {
 
 // there is more setup for this function above
 f64 platform_get_absolute_time() {
-    if (state_ptr) {
-        LARGE_INTEGER now_time;                                      // declare
-        QueryPerformanceCounter(&now_time);                          // gives us a snapshot of the current time compared to the start time - number of cycles dince the application started
-        return (f64)now_time.QuadPart * state_ptr->clock_frequency;  //  number of cycles dince the application started times the speed of the processor gives us actual time passed and returns that value
+    if (!clock_frequency) {
+        clock_setup();
     }
-    return 0;
+    LARGE_INTEGER now_time;                           // define now time as a large integer
+    QueryPerformanceCounter(&now_time);               // Retrieves the current value of the performance counter and stores it in the variable now_time get current time
+    return (f64)now_time.QuadPart * clock_frequency;  // calculates the elapsed time since the start time in seconds by converting the value of now_time.QuadPart (which is an int representing the current time per the performance counter) to a f64 then multiplying it by clock_frequency, the reciprocal of the frequency of the performance counter, which was calculated and set up in the clock_setup function.
 }
 
 // not much to do on this for now
