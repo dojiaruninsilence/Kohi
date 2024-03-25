@@ -119,6 +119,27 @@ typedef struct vulkan_fence {
     b8 is_signaled;  // and a bool on whether it is signaled or not - signaled because an operation has completed
 } vulkan_fence;
 
+// where we hold the data for creating shader stages
+typedef struct vulkan_shader_stage {
+    VkShaderModuleCreateInfo create_info;                      // vulkan info struct for creating shader modules
+    VkShaderModule handle;                                     // handle to the shader module thats created
+    VkPipelineShaderStageCreateInfo shader_stage_create_info;  // vulkan info struct for creating shader stages
+} vulkan_shader_stage;
+
+// where we hold the data for a vulkan pipeline
+typedef struct vulkan_pipeline {
+    VkPipeline handle;                 // store the handle to the pipeline
+    VkPipelineLayout pipeline_layout;  // store the piplines layout
+} vulkan_pipeline;
+
+#define OBJECT_SHADER_STAGE_COUNT 2  // set the object shader count to 2 for now - these are going to be the vertex and fragment shaders for now
+typedef struct vulkan_object_shader {
+    // vertex, fragment, ect
+    vulkan_shader_stage stages[OBJECT_SHADER_STAGE_COUNT];  // hold an array of shader stages, using the count of object shader stages this struct will hold
+
+    vulkan_pipeline pipeline;  // hold the vulkan pipeline struct
+} vulkan_object_shader;
+
 // this is where we hold all of our static data for this renderer
 typedef struct vulkan_context {
     // the framebuffer's current width
@@ -167,6 +188,8 @@ typedef struct vulkan_context {
     u32 current_frame;  // keep track of the frames
 
     b8 recreating_swapchain;  // a state that needs to be tracked in the render loop
+
+    vulkan_object_shader object_shader;  // where we store the object shader infos
 
     i32 (*find_memory_index)(u32 type_filter, u32 property_flags);  // a fuction pointer that takes in a type filter and the property flags - returns a 32 bit int
 

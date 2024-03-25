@@ -19,6 +19,9 @@
 
 #include "platform/platform.h"
 
+// shaders
+#include "shaders/vulkan_object_shader.h"
+
 // create vulkan context - there will only be one
 static vulkan_context context;
 
@@ -210,6 +213,13 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     context.images_in_flight = darray_reserve(vulkan_fence, context.swapchain.image_count);  // create a darray and allocate memory for images in flight array, use the size of a vulkan fence times the number of images in the swap chain for the size
     for (u32 i = 0; i < context.swapchain.image_count; ++i) {                                // iterate through the swapchain images
         context.images_in_flight[i] = 0;                                                     // and make sure that all of the images in flight are zeroed out - nothing should be in flight jaust yet
+    }
+
+    // create built in shaders
+    // create an object shader, pass in addresses to the context and the object shader
+    if (!vulkan_object_shader_create(&context, &context.object_shader)) {  // if it fails
+        KERROR("Error loading built-in basic_lighting shader.");           // throw an error
+        return false;                                                      // and boot out
     }
 
     // everything passed
