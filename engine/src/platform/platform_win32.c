@@ -252,7 +252,7 @@ b8 platform_create_vulkan_surface(vulkan_context *context) {
 
     context->surface = state_ptr->surface;
     return true;
-}  // this is where i left off, the video is at -----------------> 7 49<----------------------------- video #015
+}
 
 // need to learn more about these switch statements - it seems that once they are triggere they just keep moving til they find the first line of code, even if its 3 cases down
 // handle events coming in -- need to look at the microsoft documentation on this as well, look for window messages and such
@@ -291,25 +291,19 @@ LRESULT CALLBACK win32_process_message(HWND hwnd, u32 msg, WPARAM w_param, LPARA
             keys key = (u16)w_param;                                   // get the key code from w_param which contains the u16 key code
 
             // check for left and right for keys that have both
-            // alt key
-            if (w_param == VK_MENU) {                         // if the key pressed was an alt key
-                if (GetKeyState(VK_RMENU) & 0x8000) {         // if right alt was pressed
-                    key = KEY_RALT;                           // key set to right alt
-                } else if (GetKeyState(VK_LMENU) & 0x8000) {  // if left alt was pressed
-                    key = KEY_LALT;                           // key set to left alt
-                }
-            } else if (w_param == VK_SHIFT) {                  // if the key pressed was an shift key
-                if (GetKeyState(VK_RSHIFT) & 0x8000) {         // if right shift was pressed
-                    key = KEY_RSHIFT;                          // key set to right shift
-                } else if (GetKeyState(VK_LSHIFT) & 0x8000) {  // if left shift was pressed
-                    key = KEY_LSHIFT;                          // key set to left shift
-                }
-            } else if (w_param == VK_CONTROL) {                  // if the key pressed was an control key
-                if (GetKeyState(VK_RCONTROL) & 0x8000) {         // if right control was pressed
-                    key = KEY_RCONTROL;                          // key set to control shift
-                } else if (GetKeyState(VK_LCONTROL) & 0x8000) {  // if left control was pressed
-                    key = KEY_LCONTROL;                          // key set to left control
-                }
+            // Check for extended scan code.
+            b8 is_extended = (HIWORD(l_param) & KF_EXTENDED) == KF_EXTENDED;
+
+            // Keypress only determines if _any_ alt/ctrl/shift key is pressed. Determine which one if so.
+            if (w_param == VK_MENU) {  // if the key pressed was an alt key
+                key = is_extended ? KEY_RALT : KEY_LALT;
+            } else if (w_param == VK_SHIFT) {  // if the key pressed was an shift key
+                // Annoyingly, KF_EXTENDED is not set for shift keys.
+                u32 left_shift = MapVirtualKey(VK_LSHIFT, MAPVK_VK_TO_VSC);
+                u32 scancode = ((l_param & (0xFF << 16)) >> 16);
+                key = scancode == left_shift ? KEY_LSHIFT : KEY_RSHIFT;
+            } else if (w_param == VK_CONTROL) {  // if the key pressed was an control key
+                key = is_extended ? KEY_RCONTROL : KEY_LCONTROL;
             }
 
             // pass to the input subsystem for processing

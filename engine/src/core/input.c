@@ -54,26 +54,29 @@ void input_update(f64 delta_time) {
 
 // keyboard internal functions
 void input_process_key(keys key, b8 pressed) {  // takes in a key and whether it is pressed or not
-
-    // just a check to see if left and right keys are working
-    if (key == KEY_LALT) {
-        KINFO("left alt key is pressed");
-    } else if (key == KEY_RALT) {
-        KINFO("right alt key is pressed");
-    } else if (key == KEY_LSHIFT) {
-        KINFO("left shift key is pressed");
-    } else if (key == KEY_RSHIFT) {
-        KINFO("right shift key is pressed");
-    } else if (key == KEY_LCONTROL) {
-        KINFO("left control key is pressed");
-    } else if (key == KEY_RCONTROL) {
-        KINFO("right control key is pressed");
-    }
-
     // only handle this if the state has actually changed
-    if (state_ptr->keyboard_current.keys[key] != pressed) {  // check to see if the state has actually changed
+    if (state_ptr && state_ptr->keyboard_current.keys[key] != pressed) {  // check to see if the state has actually changed
         // update internal state
         state_ptr->keyboard_current.keys[key] = pressed;  // so if they arent equal then set them to equal
+
+        // just a check to see if left and right keys are working
+        if (key == KEY_LALT) {
+            KINFO("Left alt %s.", pressed ? "pressed" : "released");
+        } else if (key == KEY_RALT) {
+            KINFO("Right alt %s.", pressed ? "pressed" : "released");
+        }
+
+        if (key == KEY_LCONTROL) {
+            KINFO("Left ctrl %s.", pressed ? "pressed" : "released");
+        } else if (key == KEY_RCONTROL) {
+            KINFO("Right ctrl %s.", pressed ? "pressed" : "released");
+        }
+
+        if (key == KEY_LSHIFT) {
+            KINFO("Left shift %s.", pressed ? "pressed" : "released");
+        } else if (key == KEY_RSHIFT) {
+            KINFO("Right shift %s.", pressed ? "pressed" : "released");
+        }
 
         // fire off an event for immediate processing
         event_context context;                                                               // create event context
