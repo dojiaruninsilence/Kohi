@@ -9,6 +9,7 @@
 #include "vulkan_framebuffer.h"
 #include "vulkan_fence.h"
 #include "vulkan_utils.h"
+#include "vulkan_buffer.h"
 
 #include "core/logger.h"
 #include "core/kstring.h"
@@ -16,6 +17,8 @@
 #include "core/application.h"
 
 #include "containers/darray.h"
+
+#include "math/math_types.h"
 
 #include "platform/platform.h"
 
@@ -36,8 +39,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data,  // the message
     void* user_data);                                           // could contain the name of the application or wherever it is running from
 
-// foreward declaration
+// foreward declarations
 i32 find_memory_index(u32 type_filter, u32 property_flags);
+b8 create_buffers(vulkan_context* context);  // private declaration to create a data buffer
 
 void create_command_buffers(renderer_backend* backend);                                                               // private function to create command buffers, just takes in the renderer backend
 void regenerate_framebuffers(renderer_backend* backend, vulkan_swapchain* swapchain, vulkan_renderpass* renderpass);  // private function to create/regenerate framebuffers, pass in pointers to the backend, the swapchain, and the renderpass - going to hook all these together
@@ -222,6 +226,9 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
         return false;                                                      // and boot out
     }
 
+    // create buffers
+    create_buffers(&context);
+
     // everything passed
     KINFO("Vulkan renderer initialized successfully.");
     return true;
@@ -232,6 +239,10 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
     vkDeviceWaitIdle(context.device.logical_device);
 
     // destroy in the opposite order of creation
+
+    // destroy the vulkan buffers
+    vulkan_buffer_destroy(&context, &context.object_vertex_buffer);
+    vulkan_buffer_destroy(&context, &context.object_index_buffer);
 
     // destroy the vulkan object shader
     vulkan_object_shader_destroy(&context, &context.object_shader);  // pass in addresses to the context, and the object shader to be destoyed
@@ -653,6 +664,39 @@ b8 recreate_swapchain(renderer_backend* backend) {  // private function to recre
 
     // clear the recreating flag - no longer in recreating swapchain state
     context.recreating_swapchain = false;
+
+    return true;
+}
+
+b8 create_buffers(vulkan_context* context) {
+    VkMemoryPropertyFlagBits memory_property_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;  // only use memory that is local to the host, this makes it faster
+    // set the vertex buffer size, after the vertex 3d is finished this will total 64mb
+    const u64 vertex_buffer_size = sizeof(vertex_3d) * 1024 * 1024;
+    if (!vulkan_buffer_create(   // call the create buffer function. and check if it succeeds
+            context,             // pass it the context
+            vertex_buffer_size,  // the size needed
+            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            memory_property_flags,              // pass in local memory bit
+            true,                               // bind on creation
+            &context->object_vertex_buffer)) {  // the address for where the buffer will be
+        KERROR("Error creating vertex buffer.");
+        return false;
+    }
+    context->geometry_index_offset = 0;
+
+    // set the index buffer size,
+    const u64 index_buffer_size = sizeof(u32) * 1024 * 1024;
+    if (!vulkan_buffer_create(  // call the create buffer function. and check if it succeeds
+            context,            // pass it the context
+            index_buffer_size,  // the size needed
+            VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            memory_property_flags,             // pass in local memory bit
+            true,                              // bind on creation
+            &context->object_index_buffer)) {  // the address for where the buffer will be
+        KERROR("Error creating index buffer.");
+        return false;
+    }
+    context->geometry_index_offset = 0;
 
     return true;
 }

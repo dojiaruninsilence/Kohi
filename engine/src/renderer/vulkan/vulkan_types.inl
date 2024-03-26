@@ -11,6 +11,18 @@
         KASSERT(expr == VK_SUCCESS); \
     }
 
+// where we are storing the info for the vulkan buffers
+typedef struct vulkan_buffer {
+    u64 total_size;               // total size the buffer is taking
+    VkBuffer handle;              // handle to the actuall buffer that holds the data
+    VkBufferUsageFlagBits usage;  // hold the usage of the buffer
+    b8 is_locked;                 // is the buffer locked
+    VkDeviceMemory memory;        // allocate and hold on to device memory
+    i32 memory_index;             // where the memory is currently at
+    u32 memory_property_flags;    // and the type of memory
+} vulkan_buffer;
+
+// where we are storing the swapchain support info
 typedef struct vulkan_swapchain_support_info {
     VkSurfaceCapabilitiesKHR capabilities;  // features and capabilities on the surface
     u32 format_count;                       // count of image formats used for rendering
@@ -168,6 +180,10 @@ typedef struct vulkan_context {
     vulkan_swapchain swapchain;         // vulkan swapchain - controls images to be rendered to and presented, hold the images
     vulkan_renderpass main_renderpass;  // store the main vulkan render pass
 
+    // buffers stuffs
+    vulkan_buffer object_vertex_buffer;  // store vertex buffers
+    vulkan_buffer object_index_buffer;   // store index buffers
+
     // darray -- we are going to have a whole array of command buffers
     vulkan_command_buffer* graphics_command_buffers;  // an array to store all of the graphics queue command buffers
 
@@ -190,6 +206,9 @@ typedef struct vulkan_context {
     b8 recreating_swapchain;  // a state that needs to be tracked in the render loop
 
     vulkan_object_shader object_shader;  // where we store the object shader infos
+
+    u64 geometry_vertex_offset;  // offset to keep track of everytime that we load data into the buffer
+    u64 geometry_index_offset;   // offset to keep track of everytime that we load data into the buffer
 
     i32 (*find_memory_index)(u32 type_filter, u32 property_flags);  // a fuction pointer that takes in a type filter and the property flags - returns a 32 bit int
 
