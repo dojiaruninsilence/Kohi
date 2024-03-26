@@ -109,5 +109,8 @@ void vulkan_object_shader_destroy(vulkan_context* context, vulkan_object_shader*
 }
 
 // use a vulkan object shader, pass in a pointer to the context, and a pointer to where the shader struct is held
-void vulkan_object_shader_use(vulkan_context* context, vulkan_object_shader* out_shader) {
+void vulkan_object_shader_use(vulkan_context* context, vulkan_object_shader* shader) {
+    u32 image_index = context->image_index;  // get the current image index from the context
+    // bind the pipline, pass in the graphics command buffer at the current image index, bind to graphics bind point of the pipeline, and an address to the pipline to bind
+    vulkan_pipeline_bind(&context->graphics_command_buffers[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, &shader->pipeline);
 }

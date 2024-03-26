@@ -57,10 +57,10 @@ b8 create_shader_module(
     shader_stages[stage_index].shader_stage_create_info.module = shader_stages[stage_index].handle;                   // pass in the handle to the resulting shader module
     shader_stages[stage_index].shader_stage_create_info.pName = "main";                                               // give the shader module the name of main, for main shadr i would guess - this is the entry point to the shader itself
 
-    if (file_buffer) {                                             // if a file buffer exists
-        kfree(file_buffer, sizeof(u8) * size, MEMORY_TAG_STRING);  // free the memory it was pointing to, using the size of a u8 times the size of the file
-        file_buffer = 0;                                           // reset the file buffer pointer
-    }
+    // if (file_buffer) {                                             // if a file buffer exists
+    //     kfree(file_buffer, sizeof(u8) * size, MEMORY_TAG_STRING);  // free the memory it was pointing to, using the size of a u8 times the size of the file
+    //     file_buffer = 0;                                           // reset the file buffer pointer
+    // }
 
     // if all was a success
     return true;

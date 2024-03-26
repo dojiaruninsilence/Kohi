@@ -19,7 +19,7 @@ typedef union vec2_u {
 } vec2;
 
 // vector 3 union  - can input a combination of any of these below - is a union of types. they all take the same amount of space up
-typedef struct vec3_u {
+typedef union vec3_u {
     // an array of x, y, z
     f32 elements[3];  // input as an array of elements
     struct {
