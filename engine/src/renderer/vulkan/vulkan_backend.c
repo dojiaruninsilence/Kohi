@@ -233,6 +233,9 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
 
     // destroy in the opposite order of creation
 
+    // destroy the vulkan object shader
+    vulkan_object_shader_destroy(&context, &context.object_shader);  // pass in addresses to the context, and the object shader to be destoyed
+
     // destroy syncronization objects
     for (u8 i = 0; i < context.swapchain.max_frames_in_flight; ++i) {  // iterate through all the max frames in flight
         if (context.image_available_semaphores[i]) {                   // if there is a semaphore at index i
