@@ -127,7 +127,7 @@ b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* ou
     // create the uniform buffer
     if (!vulkan_buffer_create(                                                                                                 // check if it fails
             context,                                                                                                           // pass it the context
-            sizeof(global_uniform_object) * 3,                                                                                     // use size of the global uniform object for the size
+            sizeof(global_uniform_object) * 3,                                                                                 // use size of the global uniform object for the size
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,                                             // this will be a transfer destination, and will be used as a uniform buffer
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,  // will use local device memory for performance, but will be visible and coherent to the host
             true,                                                                                                              // bind as soon as its made
@@ -154,7 +154,7 @@ b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* ou
 }
 
 // create a vulkan object shader, pass in a pointer to the context and a pointer to where the stucture for the shader is held
-void vulkan_object_shader_destroy(vulkan_context* context, vulkan_object_shader* shader) {
+void vulkan_object_shader_destroy(vulkan_context* context, struct vulkan_object_shader* shader) {
     // convenience definition
     VkDevice logical_device = context->device.logical_device;
 
@@ -178,14 +178,14 @@ void vulkan_object_shader_destroy(vulkan_context* context, vulkan_object_shader*
 }
 
 // use a vulkan object shader, pass in a pointer to the context, and a pointer to where the shader struct is held
-void vulkan_object_shader_use(vulkan_context* context, vulkan_object_shader* shader) {
+void vulkan_object_shader_use(vulkan_context* context, struct vulkan_object_shader* shader) {
     u32 image_index = context->image_index;  // get the current image index from the context
     // bind the pipline, pass in the graphics command buffer at the current image index, bind to graphics bind point of the pipeline, and an address to the pipline to bind
     vulkan_pipeline_bind(&context->graphics_command_buffers[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, &shader->pipeline);
 }
 
 // update the object shaders global state, , pass in a pointer to the context, and a pointer to where the shader struct is held
-void vulkan_object_shader_update_global_state(vulkan_context* context, vulkan_object_shader* shader) {
+void vulkan_object_shader_update_global_state(vulkan_context* context, struct vulkan_object_shader* shader) {
     u32 image_index = context->image_index;                                                  // convenience
     VkCommandBuffer command_buffer = context->graphics_command_buffers[image_index].handle;  // define a command buffer to use
     VkDescriptorSet global_descriptor = shader->global_descriptor_sets[image_index];         // define a descriptor to update
@@ -216,4 +216,15 @@ void vulkan_object_shader_update_global_state(vulkan_context* context, vulkan_ob
 
     // update the descriptor sets, pass in the logical device, only one set, pass in the info created above, dont make any copies
     vkUpdateDescriptorSets(context->device.logical_device, 1, &descriptor_write, 0, 0);
+}
+
+// this is only temporary, this will be moving
+void vulkan_object_shader_update_object(vulkan_context* context, struct vulkan_object_shader* shader, mat4 model) {
+    u32 image_index = context->image_index;                                                  // convenience
+    VkCommandBuffer command_buffer = context->graphics_command_buffers[image_index].handle;  // define a command buffer to use
+
+    // push constants work kind of like a uniform except that they work without descriptor sets - used for frequently changing data - can be executed at any point, not only in a render pass
+    // vulkan recomends using no more than 128 bytes for a push constant
+    // push constants fuction, pass in the current graphics command buffer, the pipline layout, vertex stage, 0 offset, the size of a 4 x 4 matrix, and the address of the model
+    vkCmdPushConstants(command_buffer, shader->pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &model);
 }

@@ -487,20 +487,6 @@ void vulkan_renderer_update_global_state(mat4 projection, mat4 view, vec3 view_p
 
     // update the global state
     vulkan_object_shader_update_global_state(&context, &context.object_shader);
-
-    // TODO: temporary test code
-    vulkan_object_shader_use(&context, &context.object_shader);
-
-    // Bind vertex buffer at offset.
-    VkDeviceSize offsets[1] = {0};
-    vkCmdBindVertexBuffers(command_buffer->handle, 0, 1, &context.object_vertex_buffer.handle, (VkDeviceSize*)offsets);
-
-    // Bind index buffer at offset.
-    vkCmdBindIndexBuffer(command_buffer->handle, context.object_index_buffer.handle, 0, VK_INDEX_TYPE_UINT32);
-
-    // Issue the draw.
-    vkCmdDrawIndexed(command_buffer->handle, 6, 1, 0, 0, 0);
-    // TODO: end temp code
 }
 
 b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) {
@@ -578,6 +564,28 @@ b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) 
 
     // if all of this has passed, we have rendered to the screen
     return true;
+}
+
+// update an object using push constants, input a model to upload
+void vulkan_backend_update_object(mat4 model) {
+    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // conveinience pointer
+
+    // all we are doing for now is calling our shader update object, pass in the context the object shader, and the model to pass in
+    vulkan_object_shader_update_object(&context, &context.object_shader, model);
+
+    // TODO: temporary test code
+    vulkan_object_shader_use(&context, &context.object_shader);
+
+    // Bind vertex buffer at offset.
+    VkDeviceSize offsets[1] = {0};
+    vkCmdBindVertexBuffers(command_buffer->handle, 0, 1, &context.object_vertex_buffer.handle, (VkDeviceSize*)offsets);
+
+    // Bind index buffer at offset.
+    vkCmdBindIndexBuffer(command_buffer->handle, context.object_index_buffer.handle, 0, VK_INDEX_TYPE_UINT32);
+
+    // Issue the draw.
+    vkCmdDrawIndexed(command_buffer->handle, 6, 1, 0, 0, 0);
+    // TODO: end temp code
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(

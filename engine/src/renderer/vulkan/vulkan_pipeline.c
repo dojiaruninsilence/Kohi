@@ -119,6 +119,14 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
     // create the vulkan struct for creating a pipeline layout, use the macro to format and fill with default values
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
 
+    // push constants
+    VkPushConstantRange push_constant;
+    push_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;             // for the vertex shader stage
+    push_constant.offset = sizeof(mat4) * 0;                           // 0 for now
+    push_constant.size = sizeof(mat4) * 2;                             // equals 128 bytes, which is the max we want to use for push constants
+    pipeline_layout_create_info.pushConstantRangeCount = 1;            // only one push constant for now
+    pipeline_layout_create_info.pPushConstantRanges = &push_constant;  // array of push constants
+
     // descriptor set layouts - this has to do with uniforms
     pipeline_layout_create_info.setLayoutCount = descriptor_set_layout_count;
     pipeline_layout_create_info.pSetLayouts = descriptor_set_layouts;

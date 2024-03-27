@@ -21,3 +21,6 @@ void vulkan_renderer_update_global_state(mat4 projection, mat4 view, vec3 view_p
 
 // everything that needs to be done to end a frame
 b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time);
+
+// update an object using push constants, input a model to upload
+void vulkan_backend_update_object(mat4 model);

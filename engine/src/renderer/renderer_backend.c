@@ -11,6 +11,7 @@ b8 renderer_backend_create(renderer_backend_type type, renderer_backend* out_ren
         out_renderer_backend->update_global_state = vulkan_renderer_update_global_state;  // pointer to the update global state function
         out_renderer_backend->end_frame = vulkan_renderer_backend_end_frame;              // pointer to the end frame function
         out_renderer_backend->resized = vulkan_renderer_backend_on_resized;               // pointer to the on resized function
+        out_renderer_backend->update_object = vulkan_backend_update_object;               // pointer to the update object function
 
         return true;
     }
@@ -26,4 +27,5 @@ void renderer_backend_destroy(renderer_backend* renderer_backend) {
     renderer_backend->update_global_state = 0;
     renderer_backend->end_frame = 0;
     renderer_backend->resized = 0;
+    renderer_backend->update_object = 0;
 }

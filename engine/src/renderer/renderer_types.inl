@@ -38,6 +38,9 @@ typedef struct renderer_backend {
 
     // end frame cleans everything up for the next frame
     b8 (*end_frame)(struct renderer_backend* backend, f32 delta_time);  // boolean, make sure frame ends succeffully. takes in delta time as well as the backend
+
+    // update an object using push constants - just pass in a model to upload
+    void (*update_object)(mat4 model);
 } renderer_backend;
 
 typedef struct render_packet {
