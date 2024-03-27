@@ -53,7 +53,8 @@
 			"xiosbase": "cpp",
 			"ios": "cpp",
 			"iosfwd": "c",
-			"xlocbuf": "c"
+			"xlocbuf": "c",
+			"vulkan_shader_utils.h": "c"
 		}
 	}
 }

@@ -4,6 +4,7 @@
 
 #include "core/logger.h"
 #include "core/kmemory.h"
+#include "math/kmath.h"
 
 // where we're going to store all of the info for the renderer systems state
 typedef struct renderer_system_state {
@@ -73,6 +74,13 @@ void renderer_on_resized(u16 width, u16 height) {
 b8 renderer_draw_frame(render_packet* packet) {
     // if the begin frame returned successfully, mid-frame operations may continue
     if (renderer_begin_frame(packet->delta_time)) {  // call backend begin frame pointer function, pass in the delta time from the packet
+        mat4 projection = mat4_perspective(deg_to_rad(45.0f), 1280 / 720.0f, 0.1f, 1000.0f);
+        static f32 z = -1.0f;
+        z -= 0.005;
+        mat4 view = mat4_translation((vec3){0, 0, z});
+
+        // update the global state - just passing in default like values for now, to test it
+        state_ptr->backend.update_global_state(projection, view, vec3_zero(), vec4_one(), 0);
 
         // end the frame if this fails, it is likely unrecoverable
         b8 result = renderer_end_frame(packet->delta_time);  // call backend end frame pointer function pointer, pass the delta time from the packet, increment the frame number

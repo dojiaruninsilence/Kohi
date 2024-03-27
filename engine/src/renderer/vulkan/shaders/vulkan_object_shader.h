@@ -11,3 +11,6 @@ void vulkan_object_shader_destroy(vulkan_context* context, vulkan_object_shader*
 
 // use a vulkan object shader, pass in a pointer to the context, and a pointer to where the shader struct is held
 void vulkan_object_shader_use(vulkan_context* context, vulkan_object_shader* shader);
+
+// update the object shaders global state, , pass in a pointer to the context, and a pointer to where the shader struct is held
+void vulkan_object_shader_update_global_state(vulkan_context* context, vulkan_object_shader* shader);

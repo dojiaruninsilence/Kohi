@@ -2,6 +2,7 @@
 
 #include "defines.h"
 #include "core/asserts.h"
+#include "renderer/renderer_types.inl"
 
 #include <vulkan/vulkan.h>
 
@@ -145,11 +146,27 @@ typedef struct vulkan_pipeline {
 } vulkan_pipeline;
 
 #define OBJECT_SHADER_STAGE_COUNT 2  // set the object shader count to 2 for now - these are going to be the vertex and fragment shaders for now
+
 typedef struct vulkan_object_shader {
     // vertex, fragment, ect
     vulkan_shader_stage stages[OBJECT_SHADER_STAGE_COUNT];  // hold an array of shader stages, using the count of object shader stages this struct will hold
 
+    // descriptor stuffs
+    VkDescriptorPool global_descriptor_pool;             // descriptors are like command buffers, in that that come from and return too a pool
+    VkDescriptorSetLayout global_descriptor_set_layout;  // defines the layout of a descriptor set
+
+    // one descriptor set per frame - max 3 for triple-buffering
+    VkDescriptorSet global_descriptor_sets[3];
+
+    // global uniform object
+    global_uniform_object global_ubo;  // store global object stuffs like view, and projection matrices
+
+    // global uniform buffer
+    vulkan_buffer global_uniform_buffer;
+
+    // pipeline
     vulkan_pipeline pipeline;  // hold the vulkan pipeline struct
+
 } vulkan_object_shader;
 
 // this is where we hold all of our static data for this renderer
