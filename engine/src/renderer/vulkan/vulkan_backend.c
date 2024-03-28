@@ -10,6 +10,7 @@
 #include "vulkan_fence.h"
 #include "vulkan_utils.h"
 #include "vulkan_buffer.h"
+#include "vulkan_image.h"
 
 #include "core/logger.h"
 #include "core/kstring.h"
@@ -783,4 +784,126 @@ b8 create_buffers(vulkan_context* context) {
     context->geometry_index_offset = 0;
 
     return true;
+}
+
+// create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
+// a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
+void vulkan_renderer_create_texture(
+    const char* name,
+    b8 auto_release,
+    i32 width,
+    i32 height,
+    i32 channel_count,
+    const u8* pixels,
+    b8 has_transparency,
+    texture* out_texture) {
+    // pass these through
+    out_texture->width = width;
+    out_texture->height = height;
+    out_texture->channel_count = channel_count;
+    out_texture->generation = 0;  // coming back to this
+
+    // internal data creation
+    // TODO: use an allocator for this - this will be done with a custom allocator as soon as we have the capability to
+    out_texture->internal_data = (vulkan_texture_data*)kallocate(sizeof(vulkan_texture_data), MEMORY_TAG_TEXTURE);
+    vulkan_texture_data* data = (vulkan_texture_data*)out_texture->internal_data;
+    VkDeviceSize image_size = width * height * channel_count;  // this is the number of pixels times the number of channels for those pixels - like the length of the pixels array
+
+    // NOTE:  assumes there are 8 bits per channel - there is logic that can detect this, just not going to add it yet
+    VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
+
+    // create a staging buffer and load data into it - going to take the data in pixels and load it into vulkan memory
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;                                                           // this indicating that this is a transfer buffer
+    VkMemoryPropertyFlags memory_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;  // use both host visible and coherent memory
+    vulkan_buffer staging;                                                                                                 // define the staging buffer
+    vulkan_buffer_create(&context, image_size, usage, memory_prop_flags, true, &staging);                                  // create the buffer, give it the context, the image size, what its used for, memory flaga above, immediately bind, and the address for the buffer
+
+    // load the data into the buffer, pass it the context, the buffer, starts at the beginning, size is the image size, no flags, and the data is pixels(the image)
+    vulkan_buffer_load_data(&context, &staging, 0, image_size, 0, pixels);
+
+    // create a vulkan image - will be making this more dynamic in the future
+    vulkan_image_create(
+        &context,          // pass in the context
+        VK_IMAGE_TYPE_2D,  // is going to be a 2d image
+        width,             // pass in the size
+        height,
+        image_format,                                                                                                                          // had coded to rgba 8 bit per channel for now
+        VK_IMAGE_TILING_OPTIMAL,                                                                                                               // tiling is optimal
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,  // the image is both a transfer sourc and destination, it can be sampled, can be used for a color attachement
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,                                                                                                   // use local device memory faster
+        true,                                                                                                                                  // create a view for the image
+        VK_IMAGE_ASPECT_COLOR_BIT,                                                                                                             // its a color
+        &data->image);                                                                                                                         // and the address to the image
+
+    vulkan_command_buffer temp_buffer;                                                  // define a temprary command buffer
+    VkCommandPool pool = context.device.graphics_command_pool;                          // define a graphics command pool
+    VkQueue queue = context.device.graphics_queue;                                      // define a graphics queue
+    vulkan_command_buffer_allocate_and_begin_single_use(&context, pool, &temp_buffer);  // allocate a command buffer for one use, use the pool and buffer defined above
+
+    // transition the layout from whatever it is currently to optimal for recieving data
+    vulkan_image_transition_layout(
+        &context,                               // pass in the context
+        &temp_buffer,                           // the command buffer just created
+        &data->image,                           // address of the image being transitioned
+        image_format,                           // hard coded to rgba 8 bits per channel for now
+        VK_IMAGE_LAYOUT_UNDEFINED,              // old layout
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);  // new layout
+
+    // copy the data from the buffer - copies the data stored in staging to the image
+    vulkan_image_copy_from_buffer(&context, &data->image, staging.handle, &temp_buffer);
+
+    // transition from optimal for data receipt to shader read only optimal layout
+    vulkan_image_transition_layout(
+        &context,
+        &temp_buffer,
+        &data->image,
+        image_format,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,       // these two are only difference from previous call, old layout
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);  // new layout
+
+    // end the single use command buffer
+    vulkan_command_buffer_end_single_use(&context, pool, &temp_buffer, queue);
+
+    // create a sampler for the texture
+    // create the vulkan struct for creating a sampler, use the macro to format and fill with default values
+    VkSamplerCreateInfo sampler_info = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+    // TODO: these filters should be configurable
+    sampler_info.magFilter = VK_FILTER_LINEAR;  // these are how it should be interpolated when it is magnified and such
+    sampler_info.minFilter = VK_FILTER_LINEAR;
+    sampler_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;  // u, v, and w are used for texture coords
+    sampler_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;  // repeat means that the image will tile to fill the needed area
+    sampler_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    sampler_info.anisotropyEnable = VK_TRUE;  // is a type of texture filtering
+    sampler_info.maxAnisotropy = 16;
+    sampler_info.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    sampler_info.unnormalizedCoordinates = VK_FALSE;
+    sampler_info.compareEnable = VK_FALSE;
+    sampler_info.compareOp = VK_COMPARE_OP_ALWAYS;
+    sampler_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;  // generates mip maps using linear interpolation
+    sampler_info.mipLodBias = 0.0f;                           // but we arent using mip maps yet
+    sampler_info.minLod = 0.0f;
+    sampler_info.maxLod = 0.0f;
+
+    // actually create the sampler, and check the results, pass it the logical device, the info created above, the memoty allocation stuffs, and an address for the sampler being created
+    VkResult result = vkCreateSampler(context.device.logical_device, &sampler_info, context.allocator, &data->sampler);
+    if (!vulkan_result_is_success(VK_SUCCESS)) {
+        KERROR("Error creating texture sampler: %s", vulkan_result_string(result, true));
+        return;
+    }
+
+    out_texture->has_transparency = has_transparency;  // pass through has transparency
+    out_texture->generation++;                         // incrememnt the generation - how many times this texture has been loaded, or refreshed
+}
+
+// destroy a texture
+void vulkan_renderer_destroy_texture(texture* texture) {
+    vulkan_texture_data* data = (vulkan_texture_data*)texture->internal_data;  // conveneince pointer
+
+    vulkan_image_destroy(&context, &data->image);                                       // destoy the image
+    kzero_memory(&data->image, sizeof(vulkan_image));                                   // zero out the memory from the image
+    vkDestroySampler(context.device.logical_device, data->sampler, context.allocator);  // destroy the sampler
+    data->sampler = 0;                                                                  // zero out the sampler
+
+    kfree(texture->internal_data, sizeof(vulkan_texture_data), MEMORY_TAG_TEXTURE);  // free the kallocate memory for internal data
+    kzero_memory(texture, sizeof(struct texture));                                   // zero out the memory of the texture
 }

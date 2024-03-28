@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renderer/renderer_backend.h"
+#include "resources/resource_types.h"
 
 // these are the vulkan specific functions, for the pointer functions in the renderer_types.inl
 
@@ -24,3 +25,18 @@ b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time);
 
 // update an object using push constants, input a model to upload
 void vulkan_backend_update_object(mat4 model);
+
+// create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
+// a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
+void vulkan_renderer_create_texture(
+    const char* name,
+    b8 auto_release,
+    i32 width,
+    i32 height,
+    i32 channel_count,
+    const u8* pixels,
+    b8 has_transparency,
+    texture* out_texture);
+
+// destroy a texture
+void vulkan_renderer_destroy_texture(texture* texture);

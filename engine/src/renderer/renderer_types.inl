@@ -2,6 +2,7 @@
 
 #include "defines.h"
 #include "math/math_types.h"
+#include "resources/resource_types.h"
 
 typedef enum renderer_backend_type {
     RENDERER_BACKEND_TYPE_VULKAN,
@@ -23,6 +24,8 @@ typedef struct global_uniform_object {
 typedef struct renderer_backend {
     u64 frame_number;  // keep track of the frames rendered
 
+    // pointer functions, so we can eventually have multiple backends and not have to change all the code higher level than here
+
     b8 (*initialize)(struct renderer_backend* backend, const char* application_name);  // funtion ptr called initialize, takes in a ptr to a renderer backend, pointer to the application name
 
     void (*shutdown)(struct renderer_backend* backend);  // function ptr shutdown, takes in the pointer to the renderer backend
@@ -41,6 +44,24 @@ typedef struct renderer_backend {
 
     // update an object using push constants - just pass in a model to upload
     void (*update_object)(mat4 model);
+
+    // textures
+
+    // create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
+    // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
+    void (*create_texture)(
+        const char* name,
+        b8 auto_release,
+        i32 width,
+        i32 height,
+        i32 channel_count,
+        const u8* pixels,
+        b8 has_transparency,
+        struct texture* out_texture);
+
+    // destroy a texture
+    void (*destroy_texture)(struct texture* texture);
+
 } renderer_backend;
 
 typedef struct render_packet {

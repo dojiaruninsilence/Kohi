@@ -230,3 +230,9 @@ typedef struct vulkan_context {
     i32 (*find_memory_index)(u32 type_filter, u32 property_flags);  // a fuction pointer that takes in a type filter and the property flags - returns a 32 bit int
 
 } vulkan_context;
+
+// where we can store the vulkan specific internal texture data
+typedef struct vulkan_texture_data {
+    vulkan_image image;
+    VkSampler sampler;
+} vulkan_texture_data;
