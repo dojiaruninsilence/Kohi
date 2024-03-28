@@ -9,6 +9,10 @@
 // where we're going to store all of the info for the renderer systems state
 typedef struct renderer_system_state {
     renderer_backend backend;  // store the renderer backend
+    mat4 projection;           // store the projection matrix
+    mat4 view;                 // store a calculated view matrix
+    f32 near_clip;             // hang on to the near_clip value
+    f32 far_clip;              // hang on to the far_clip value
 } renderer_system_state;
 
 // hold a pointer to the renderer systen state internally
@@ -31,6 +35,16 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
         KFATAL("Renderer backend failed to initialize. Shutting sown.");          // if it fails log a fatal error
         return false;                                                             // and shut down the renderer initialize - boot out
     }
+
+    // define the near and far clip
+    state_ptr->near_clip = 0.1f;
+    state_ptr->far_clip = 1000.0f;
+    // define default values for the projection matrix - using a perspective style matrix
+    state_ptr->projection = mat4_perspective(deg_to_rad(45.0f), 1280 / 720.0f, state_ptr->near_clip, state_ptr->far_clip);
+
+    // define default values for the view matrix
+    state_ptr->view = mat4_translation((vec3){0, 0, 30.0f});
+    state_ptr->view = mat4_inverse(state_ptr->view);
 
     return true;
 }
@@ -63,10 +77,11 @@ b8 renderer_end_frame(f32 delta_time) {
 
 // on a renderer resize
 void renderer_on_resized(u16 width, u16 height) {
-    if (state_ptr) {                                                                      // verify that a renderer backend exists to resize
-        state_ptr->backend.resized(&state_ptr->backend, width, height);                   // call the pointer function resized and pass in the backend, and pass through the width and the height
-    } else {                                                                              // if no backend
-        KWARN("renderer backend does not exist to accept resize: %i %i", width, height);  // throw a warning
+    if (state_ptr) {                                                                                                                  // verify that a renderer backend exists to resize
+        state_ptr->projection = mat4_perspective(deg_to_rad(45.0f), width / (f32)height, state_ptr->near_clip, state_ptr->far_clip);  // re calculate the perspective matrix
+        state_ptr->backend.resized(&state_ptr->backend, width, height);                                                               // call the pointer function resized and pass in the backend, and pass through the width and the height
+    } else {                                                                                                                          // if no backend
+        KWARN("renderer backend does not exist to accept resize: %i %i", width, height);                                              // throw a warning
     }
 }
 
@@ -74,14 +89,9 @@ void renderer_on_resized(u16 width, u16 height) {
 b8 renderer_draw_frame(render_packet* packet) {
     // if the begin frame returned successfully, mid-frame operations may continue
     if (renderer_begin_frame(packet->delta_time)) {  // call backend begin frame pointer function, pass in the delta time from the packet
-        mat4 projection = mat4_perspective(deg_to_rad(45.0f), 1280 / 720.0f, 0.1f, 1000.0f);
-        static f32 z = 0.0f;
-        z += 0.01f;
-        mat4 view = mat4_translation((vec3){0, 0, z});
-        view = mat4_inverse(view);
 
-        // update the global state - just passing in default like values for now, to test it
-        state_ptr->backend.update_global_state(projection, view, vec3_zero(), vec4_one(), 0);
+        // update the global state - just passing in default like values for now, to test it - the projection is being calculated now, and view matrix has default values as well
+        state_ptr->backend.update_global_state(state_ptr->projection, state_ptr->view, vec3_zero(), vec4_one(), 0);
 
         // mat4 model = mat4_translation((vec3){0, 0, 0});
         static f32 angle = 0.01f;
@@ -100,4 +110,8 @@ b8 renderer_draw_frame(render_packet* packet) {
     }
 
     return true;
+}
+
+void renderer_set_view(mat4 view) {
+    state_ptr->view = view;
 }

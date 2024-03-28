@@ -54,7 +54,8 @@
 			"ios": "cpp",
 			"iosfwd": "c",
 			"xlocbuf": "c",
-			"vulkan_shader_utils.h": "c"
+			"vulkan_shader_utils.h": "c",
+			"sstream": "c"
 		}
 	}
 }

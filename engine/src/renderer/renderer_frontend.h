@@ -13,3 +13,6 @@ void renderer_on_resized(u16 width, u16 height);  // may change the structure of
 // a renderer packet is a packet full of information prepared ahead of time
 // contains all the info that the renderer needs to know to draw that frame
 b8 renderer_draw_frame(render_packet* packet);
+
+// HACK: this should not be exposed outside the engine
+KAPI void renderer_set_view(mat4 view);
