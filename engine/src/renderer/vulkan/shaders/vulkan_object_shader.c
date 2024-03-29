@@ -3,6 +3,7 @@
 #include "core/logger.h"
 #include "core/kmemory.h"
 #include "math/math_types.h"
+#include "math/kmath.h"
 
 #include "renderer/vulkan/vulkan_shader_utils.h"
 #include "renderer/vulkan/vulkan_pipeline.h"
@@ -55,6 +56,47 @@ b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* ou
     // create the global descriptor pool
     VK_CHECK(vkCreateDescriptorPool(context->device.logical_device, &global_pool_info, context->allocator, &out_shader->global_descriptor_pool));
 
+    // create local/object descriptors, and a local/object descriptor pool
+    const u32 local_sampler_count = 1;
+    VkDescriptorType descriptor_types[VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT] = {
+        // create an array of descriptor types
+        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,          // binding 0 - uniform buffer
+        VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,  // binding 1 - diffuse sampler layout
+    };
+    VkDescriptorSetLayoutBinding bindings[VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT];                           // create an array of descriptor set layouts, only one for now
+    kzero_memory(&bindings, sizeof(VkDescriptorSetLayoutBinding) * VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT);  // zero out the memory for the array
+    for (u32 i = 0; i < VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT; i++) {                                       // iterate through all the descriptors
+        bindings[i].binding = i;                                                                            // pass in the binding at index i
+        bindings[i].descriptorCount = 1;                                                                    // only one for now
+        bindings[i].descriptorType = descriptor_types[i];                                                   // pass in the type at index i
+        bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;                                              // for the fragment shader
+    }
+
+    // create the vulkan struct for creating a descriptor set layout, use the macro to format and fill with default values
+    VkDescriptorSetLayoutCreateInfo layout_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    layout_info.bindingCount = VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT;  // only one for now
+    layout_info.pBindings = bindings;
+    // create the descriptor set layout - pass in the logical device, the info struct created above, memory allocation stuffs, and an address of where the descriptor set layout is going to be held
+    VK_CHECK(vkCreateDescriptorSetLayout(context->device.logical_device, &layout_info, 0, &out_shader->object_descriptor_set_layout));
+
+    // local/object descriptor pool: used for object-specific items like diffuse colour
+    VkDescriptorPoolSize object_pool_sizes[2];
+    // the first section will be used for uniform buffers
+    object_pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    object_pool_sizes[0].descriptorCount = VULKAN_OBJECT_MAX_OBJECT_COUNT;
+    // the second section will be used for image samplers
+    object_pool_sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    object_pool_sizes[1].descriptorCount = local_sampler_count * VULKAN_OBJECT_MAX_OBJECT_COUNT;
+
+    // create the vulkan struct for creating a descriptor pool, use the macro to format and fill with default values
+    VkDescriptorPoolCreateInfo object_pool_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+    object_pool_info.poolSizeCount = 2;
+    object_pool_info.pPoolSizes = object_pool_sizes;
+    object_pool_info.maxSets = VULKAN_OBJECT_MAX_OBJECT_COUNT;
+
+    // create object descriptor pool
+    VK_CHECK(vkCreateDescriptorPool(context->device.logical_device, &object_pool_info, context->allocator, &out_shader->object_descriptor_pool));
+
     // pipeline creation
     // define the viewport to pass into the pipeline
     VkViewport viewport;                                  // define a vulkan viewport
@@ -73,18 +115,18 @@ b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* ou
 
     // define the attributes - making this expandable
     u32 offset = 0;                                                             // as we add attributes, this will help us offset new ones in bytes
-    const i32 attribute_count = 1;                                              // starting with only one attribute
-    VkVertexInputAttributeDescription attribute_descriptions[attribute_count];  // create an array of vulkan attributes
-    // position
-    VkFormat formats[attribute_count] = {
+#define ATTRIBUTE_COUNT 2                                                       // define the attribute count
+    VkVertexInputAttributeDescription attribute_descriptions[ATTRIBUTE_COUNT];  // create an array of vulkan attributes
+    // position, texture coords
+    VkFormat formats[ATTRIBUTE_COUNT] = {
         // create an array of vulkan formats, these are for the stuff passed to the glsl files
-        VK_FORMAT_R32G32B32_SFLOAT  // format for our only attribute at the moment - believe this is for a vec3 with 32 bit floating point elements
-    };
-    u64 sizes[attribute_count] = {
+        VK_FORMAT_R32G32B32_SFLOAT,  // format for our only attribute at the moment - believe this is for a vec3 with 32 bit floating point elements
+        VK_FORMAT_R32G32_SFLOAT};    // X and Y texture coords
+    u64 sizes[ATTRIBUTE_COUNT] = {
         // create an array that will have size values, that correspond to the attributes at same index in format array
-        sizeof(vec3)  // only attribute for now is a vec3(position)
-    };
-    for (u32 i = 0; i < attribute_count; ++i) {         // iterate through the attributes
+        sizeof(vec3),                                   //  vec3(position)
+        sizeof(vec2)};                                  // texture coords
+    for (u32 i = 0; i < ATTRIBUTE_COUNT; ++i) {         // iterate through the attributes
         attribute_descriptions[i].binding = 0;          // set binding index to zero
         attribute_descriptions[i].location = i;         // location to i - this location is the same location in glsl files, this is where it knows to send it
         attribute_descriptions[i].format = formats[i];  // set to corresponding format
@@ -93,9 +135,11 @@ b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* ou
     }
 
     // descriptor set layouts
-    const i32 descriptor_set_layout_count = 1;
-    VkDescriptorSetLayout layouts[1] = {// define the set layouts array
-                                        out_shader->global_descriptor_set_layout};
+    const i32 descriptor_set_layout_count = 2;
+    // define the set layouts array
+    VkDescriptorSetLayout layouts[2] = {
+        out_shader->global_descriptor_set_layout,
+        out_shader->object_descriptor_set_layout};
 
     // stages
     // NOTE: should match the number of shader->stages
@@ -110,7 +154,7 @@ b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* ou
     if (!vulkan_graphics_pipeline_create(  // and check to see if it fails
             context,                       // pass it the context
             &context->main_renderpass,     // the main renderpass
-            attribute_count,               // attribute count
+            ATTRIBUTE_COUNT,               // attribute count
             attribute_descriptions,        // attribute array
             descriptor_set_layout_count,   // no descriptors
             layouts,                       // no descriptors
@@ -127,7 +171,7 @@ b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* ou
     // create the uniform buffer
     if (!vulkan_buffer_create(                                                                                                 // check if it fails
             context,                                                                                                           // pass it the context
-            sizeof(global_uniform_object) * 3,                                                                                 // use size of the global uniform object for the size
+            sizeof(global_uniform_object),                                                                                     // use size of the global uniform object for the size
             VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,                                             // this will be a transfer destination, and will be used as a uniform buffer
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,  // will use local device memory for performance, but will be visible and coherent to the host
             true,                                                                                                              // bind as soon as its made
@@ -137,10 +181,11 @@ b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* ou
     }
 
     // allocate the global descriptor sets
-    VkDescriptorSetLayout global_layouts[3] = {                                           // define the global descriptor sets layouts array, with a length of 3, for triple buffering
-                                               out_shader->global_descriptor_set_layout,  // use the same layout for all three descriptor sets
-                                               out_shader->global_descriptor_set_layout,
-                                               out_shader->global_descriptor_set_layout};
+    // define the global descriptor sets layouts array, with a length of 3, for triple buffering
+    VkDescriptorSetLayout global_layouts[3] = {
+        out_shader->global_descriptor_set_layout,  // use the same layout for all three descriptor sets
+        out_shader->global_descriptor_set_layout,
+        out_shader->global_descriptor_set_layout};
 
     // create the vulkan struct for creating a descriptor set allocation, use the macro to format and fill with default values
     VkDescriptorSetAllocateInfo alloc_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
@@ -150,6 +195,18 @@ b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* ou
     // allocate the descriptor sets, pass in the logical device, the info just created, and the descriptor sets to allocate
     VK_CHECK(vkAllocateDescriptorSets(context->device.logical_device, &alloc_info, out_shader->global_descriptor_sets));
 
+    // create the object uniform buffer
+    if (!vulkan_buffer_create(                                                                                                 // check if it fails
+            context,                                                                                                           // pass it the context
+            sizeof(object_uniform_object),                                                                                     // use size of the uniform object for the size
+            VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,                                             // this will be a transfer destination, and will be used as a uniform buffer
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,  // will use local device memory for performance, but will be visible and coherent to the host
+            true,                                                                                                              // bind as soon as its made
+            &out_shader->object_uniform_buffer)) {                                                                             // the address of where the buffer will be held
+        KERROR("Material Instance Buffer creation failed for object shader.");
+        return false;
+    }
+
     return true;
 }
 
@@ -158,8 +215,16 @@ void vulkan_object_shader_destroy(vulkan_context* context, struct vulkan_object_
     // convenience definition
     VkDevice logical_device = context->device.logical_device;
 
-    // destroy the uniform buffer
+    // destroy object descriptor pool
+    vkDestroyDescriptorPool(logical_device, shader->object_descriptor_pool, context->allocator);
+
+    // destroy object descriptor set layouts
+    vkDestroyDescriptorSetLayout(logical_device, shader->object_descriptor_set_layout, context->allocator);
+
+    // destroy global uniform buffer
     vulkan_buffer_destroy(context, &shader->global_uniform_buffer);
+    // destroy object uniform buffer
+    vulkan_buffer_destroy(context, &shader->object_uniform_buffer);
 
     // destroy the pipeline
     vulkan_pipeline_destroy(context, &shader->pipeline);
@@ -167,7 +232,7 @@ void vulkan_object_shader_destroy(vulkan_context* context, struct vulkan_object_
     // destroy the global descriptor pool
     vkDestroyDescriptorPool(logical_device, shader->global_descriptor_pool, context->allocator);
 
-    // destroy descriptor set layouts
+    // destroy global descriptor set layouts
     vkDestroyDescriptorSetLayout(logical_device, shader->global_descriptor_set_layout, context->allocator);
 
     // destroy shader modules
@@ -185,7 +250,7 @@ void vulkan_object_shader_use(vulkan_context* context, struct vulkan_object_shad
 }
 
 // update the object shaders global state, , pass in a pointer to the context, and a pointer to where the shader struct is held
-void vulkan_object_shader_update_global_state(vulkan_context* context, struct vulkan_object_shader* shader) {
+void vulkan_object_shader_update_global_state(vulkan_context* context, struct vulkan_object_shader* shader, f32 delta_time) {
     u32 image_index = context->image_index;                                                  // convenience
     VkCommandBuffer command_buffer = context->graphics_command_buffers[image_index].handle;  // define a command buffer to use
     VkDescriptorSet global_descriptor = shader->global_descriptor_sets[image_index];         // define a descriptor to update
@@ -219,12 +284,155 @@ void vulkan_object_shader_update_global_state(vulkan_context* context, struct vu
 }
 
 // this is only temporary, this will be moving
-void vulkan_object_shader_update_object(vulkan_context* context, struct vulkan_object_shader* shader, mat4 model) {
+void vulkan_object_shader_update_object(vulkan_context* context, struct vulkan_object_shader* shader, geometry_render_data data) {
     u32 image_index = context->image_index;                                                  // convenience
     VkCommandBuffer command_buffer = context->graphics_command_buffers[image_index].handle;  // define a command buffer to use
 
     // push constants work kind of like a uniform except that they work without descriptor sets - used for frequently changing data - can be executed at any point, not only in a render pass
     // vulkan recomends using no more than 128 bytes for a push constant
     // push constants fuction, pass in the current graphics command buffer, the pipline layout, vertex stage, 0 offset, the size of a 4 x 4 matrix, and the address of the model
-    vkCmdPushConstants(command_buffer, shader->pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &model);
+    vkCmdPushConstants(command_buffer, shader->pipeline.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), &data.model);
+
+    // obtain material data
+    vulkan_object_shader_object_state* object_state = &shader->object_states[data.object_id];  // store a pointer to the objects id
+    VkDescriptorSet object_descriptor_set = object_state->descriptor_sets[image_index];        // store the desciptor set for the object at image index
+
+    // TODO: if needs update
+    VkWriteDescriptorSet descriptor_writes[VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT];                          // define an array of descriptor sets for writing
+    kzero_memory(descriptor_writes, sizeof(VkWriteDescriptorSet) * VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT);  // clear the memory of the descriptor sets
+    u32 descriptor_count = 0;                                                                               // define a descriptor count with a value of zero
+    u32 descriptor_index = 0;                                                                               // define a descriptor index with a value of zero
+
+    // descriptor 0 - uniform buffer
+    u32 range = sizeof(object_uniform_object);
+    u32 offset = sizeof(object_uniform_object) * data.object_id;  // also the index into the array
+    object_uniform_object obo;
+
+    // experimental
+    // TODO: get diffuse color from a material
+    static f32 accumulator = 0.0f;              // define an accumulator
+    accumulator += context->frame_delta_time;   // add the delta time to it every frame
+    f32 s = (ksin(accumulator) + 1.0f) / 2.0f;  // scale from -1, 1 to 0, 1
+    obo.diffuse_color = vec4_create(s, s, s, 1.0f);
+
+    // load the data into the buffer
+    vulkan_buffer_load_data(context, &shader->object_uniform_buffer, offset, range, 0, &obo);
+
+    // only do this if the descriptor has not yet been updated - check to see if it has a valid id
+    if (object_state->descriptor_states[descriptor_index].generations[image_index] == INVALID_ID) {
+        VkDescriptorBufferInfo buffer_info;                         // define some buffer info
+        buffer_info.buffer = shader->object_uniform_buffer.handle;  // pass it the handle to the object uniform buffer
+        buffer_info.offset = offset;                                // the offset
+        buffer_info.range = range;                                  // and the range
+
+        // create the vulkan struct for creating a descriptor set, use the macro to format and fill with default values
+        VkWriteDescriptorSet descriptor = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+        descriptor.dstSet = object_descriptor_set;                      // destination is the object descriptor set
+        descriptor.dstBinding = descriptor_index;                       // bind at the descriptor index
+        descriptor.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;  // is a uniform buffer
+        descriptor.descriptorCount = 1;                                 // only one for now
+        descriptor.pBufferInfo = &buffer_info;                          // pass in the info from above
+
+        descriptor_writes[descriptor_count] = descriptor;  // pass the struct to the descriptor writes array
+        descriptor_count++;                                // increment the count of the array
+
+        // update the frame generation. in this case it is only needed once since this is a buffer
+        object_state->descriptor_states[descriptor_index].generations[image_index] = 1;
+    }
+    descriptor_index++;  // increment the descriptor index
+
+    // TODO:  samplers - only one for now, but still going to setup the loop for more than one
+    const u32 sampler_count = 1;
+    VkDescriptorImageInfo image_infos[1];
+    for (u32 sampler_index = 0; sampler_index < sampler_count; ++sampler_index) {                                  // iterate through all of the samplers
+        texture* t = data.textures[sampler_index];                                                                 // align the textures with the samplers
+        u32* descriptor_generation = &object_state->descriptor_states[descriptor_index].generations[image_index];  // get a pointer to the descriptor generation at image index
+
+        // check if the descriptor needs updating first
+        if (t && (*descriptor_generation != t->generation || *descriptor_generation == INVALID_ID)) {
+            vulkan_texture_data* internal_data = (vulkan_texture_data*)t->internal_data;  // convenience
+
+            // assign view and sampler
+            image_infos[sampler_index].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            image_infos[sampler_index].imageView = internal_data->image.view;
+            image_infos[sampler_index].sampler = internal_data->sampler;
+
+            VkWriteDescriptorSet descriptor = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+            descriptor.dstSet = object_descriptor_set;
+            descriptor.dstBinding = descriptor_index;
+            descriptor.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptor.descriptorCount = 1;
+            descriptor.pImageInfo = &image_infos[sampler_index];
+
+            descriptor_writes[descriptor_count] = descriptor;
+            descriptor_count++;
+
+            // sync frame generation if not using a default texture
+            if (t->generation != INVALID_ID) {
+                *descriptor_generation = t->generation;
+            }
+            descriptor_index++;
+        }
+    }
+
+    if (descriptor_count > 0) {                                                                             // if there are any
+        vkUpdateDescriptorSets(context->device.logical_device, descriptor_count, descriptor_writes, 0, 0);  // update descriptor sets, with the new data
+    }
+
+    // bind the descriptor set to be updated, or in case the shader changed
+    vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline.pipeline_layout, 1, 1, &object_descriptor_set, 0, 0);
+}
+
+// pull in resources from outside the engine like meshes, and textures and such, and tag it with an id, to keep track of them without having to keep pointers
+b8 vulkan_object_shader_acquire_resources(vulkan_context* context, struct vulkan_object_shader* shader, u32* out_object_id) {
+    // TODO: free list
+    *out_object_id = shader->object_uniform_buffer_index;  // derenferenc the out abject id and store the buffer index value there
+    shader->object_uniform_buffer_index++;                 // increment the buffer index
+
+    u32 object_id = *out_object_id;                                                       // define object id, give it the value of out_object_id
+    vulkan_object_shader_object_state* object_state = &shader->object_states[object_id];  // get a pointer to the objects state
+    for (u32 i = 0; i < VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT; ++i) {                     // iterate through the descriptors
+        for (u32 j = 0; j < 3; ++j) {                                                     // set all three generations to invalid id
+            object_state->descriptor_states[i].generations[j] = INVALID_ID;
+        }
+    }
+
+    // allocate the descriptor sets
+    VkDescriptorSetLayout layouts[3] = {
+        shader->object_descriptor_set_layout,
+        shader->object_descriptor_set_layout,
+        shader->object_descriptor_set_layout};
+
+    // create the vulkan struct for creating a descriptor set allocation, use the macro to format and fill with default values
+    VkDescriptorSetAllocateInfo alloc_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+    alloc_info.descriptorPool = shader->object_descriptor_pool;
+    alloc_info.descriptorSetCount = 3;  // one per frame
+    alloc_info.pSetLayouts = layouts;
+    // allocate the descriptor sets, pass in the logical device, the info just created, and the descriptor sets to allocate
+    VkResult result = vkAllocateDescriptorSets(context->device.logical_device, &alloc_info, object_state->descriptor_sets);
+    if (result != VK_SUCCESS) {
+        KERROR("Error allocating descriptor sets in shader!");
+        return false;
+    }
+
+    return true;
+}
+
+void vulkan_object_shader_release_resources(vulkan_context* context, struct vulkan_object_shader* shader, u32 object_id) {
+    vulkan_object_shader_object_state* object_state = &shader->object_states[object_id];  // get a pointer to the objects state
+
+    const u32 descriptor_set_count = 3;
+    // release object descriptor sets
+    VkResult result = vkFreeDescriptorSets(context->device.logical_device, shader->object_descriptor_pool, descriptor_set_count, object_state->descriptor_sets);
+    if (result != VK_SUCCESS) {
+        KERROR("Error freeing object shader description sets!");
+    }
+    // re invalidate all of the descriptor generations
+    for (u32 i = 0; i < VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT; ++i) {  // iterate through the descriptors
+        for (u32 j = 0; j < 3; ++j) {                                  // set all three generations to invalid id
+            object_state->descriptor_states[i].generations[j] = INVALID_ID;
+        }
+    }
+
+    // TODO: the object id to the free list
 }

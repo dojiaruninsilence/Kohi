@@ -147,6 +147,23 @@ typedef struct vulkan_pipeline {
 
 #define OBJECT_SHADER_STAGE_COUNT 2  // set the object shader count to 2 for now - these are going to be the vertex and fragment shaders for now
 
+typedef struct vulkan_descriptor_state {
+    // one per frame
+    u32 generations[3];  // has this descritor been updated or does it need to be updated
+} vulkan_descriptor_state;
+
+#define VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT 2     // the amount per object
+typedef struct vulkan_object_shader_object_state {  // this struct is one per object, every object has one
+    // per frame
+    VkDescriptorSet descriptor_sets[3];
+
+    // per descriptor
+    vulkan_descriptor_state descriptor_states[VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT];
+} vulkan_object_shader_object_state;
+
+// max number of objects - this is a temporary thing
+#define VULKAN_OBJECT_MAX_OBJECT_COUNT 1024
+
 typedef struct vulkan_object_shader {
     // vertex, fragment, ect
     vulkan_shader_stage stages[OBJECT_SHADER_STAGE_COUNT];  // hold an array of shader stages, using the count of object shader stages this struct will hold
@@ -164,6 +181,18 @@ typedef struct vulkan_object_shader {
     // global uniform buffer
     vulkan_buffer global_uniform_buffer;
 
+    // object level stuffs
+    // descriptor stuffs
+    VkDescriptorPool object_descriptor_pool;  // same as for global ones but for objects instead
+    VkDescriptorSetLayout object_descriptor_set_layout;
+    // object uniform buffers - large buffer to handle all objects
+    vulkan_buffer object_uniform_buffer;
+    // TODO: manage a free list of some kind here instead
+    u32 object_uniform_buffer_index;
+
+    // TODO: make dynamic
+    vulkan_object_shader_object_state object_states[VULKAN_OBJECT_MAX_OBJECT_COUNT];
+
     // pipeline
     vulkan_pipeline pipeline;  // hold the vulkan pipeline struct
 
@@ -171,6 +200,9 @@ typedef struct vulkan_object_shader {
 
 // this is where we hold all of our static data for this renderer
 typedef struct vulkan_context {
+    // store the delta time
+    f32 frame_delta_time;
+
     // the framebuffer's current width
     u32 framebuffer_width;
 

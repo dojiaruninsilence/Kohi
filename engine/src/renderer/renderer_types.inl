@@ -19,6 +19,21 @@ typedef struct global_uniform_object {
     mat4 m_reserved1;  // 64 bytes, reserved for future use
 } global_uniform_object;
 
+// this name will change, but for now - like the global ubo, but this one is for each object - so potentially updating every frame for every object
+typedef struct object_uniform_object {
+    vec4 diffuse_color;  // 16 bytes
+    vec4 v_reserved0;    // 16 bytes, reserved for future use
+    vec4 v_reserved1;    // 16 bytes, reserved for future use
+    vec4 v_reserved2;    // 16 bytes, reserved for future use
+} object_uniform_object;
+
+// where the data for geometry to be rendered is stored - and a way to pass the geometry to the renderer
+typedef struct geometry_render_data {
+    u32 object_id;          // each object going to have an id, so we dont have to hold pointers to everything
+    mat4 model;             // model matrix for a batch of geometry
+    texture* textures[16];  // can have up to sixteen different texture pointers in an array
+} geometry_render_data;
+
 // one of the places object oriented programing makes sense
 // represents the renderer backend
 typedef struct renderer_backend {
@@ -43,7 +58,7 @@ typedef struct renderer_backend {
     b8 (*end_frame)(struct renderer_backend* backend, f32 delta_time);  // boolean, make sure frame ends succeffully. takes in delta time as well as the backend
 
     // update an object using push constants - just pass in a model to upload
-    void (*update_object)(mat4 model);
+    void (*update_object)(geometry_render_data data);
 
     // textures
 
