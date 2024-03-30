@@ -12,7 +12,10 @@
 #define BUILTIN_SHADER_NAME_OBJECT "Builtin.ObjectShader"  // this is part of the filename that we are going to load will be concatenated with the stage name and extension -- for custom shaders and such this will be different
 
 // create a vulkan object shader, pass in a pointer to the context and a pointer to where the stucture for the shader will be held
-b8 vulkan_object_shader_create(vulkan_context* context, vulkan_object_shader* out_shader) {
+b8 vulkan_object_shader_create(vulkan_context* context, texture* default_diffuse, vulkan_object_shader* out_shader) {
+    // take and store a copy of the default texture pointers
+    out_shader->default_diffuse = default_diffuse;
+
     // shader module initialize per stage
     char stage_type_strs[OBJECT_SHADER_STAGE_COUNT][5] = {"vert", "frag"};  // set up a short array of strings to obtain the various stage names that we will need for this shader
     // store the stage types - use the shader stage count for the size, and input vulkan macros for the types(vertex and fragment for now)
@@ -347,6 +350,15 @@ void vulkan_object_shader_update_object(vulkan_context* context, struct vulkan_o
     for (u32 sampler_index = 0; sampler_index < sampler_count; ++sampler_index) {                                  // iterate through all of the samplers
         texture* t = data.textures[sampler_index];                                                                 // align the textures with the samplers
         u32* descriptor_generation = &object_state->descriptor_states[descriptor_index].generations[image_index];  // get a pointer to the descriptor generation at image index
+
+        // if the texture hasn't been loaded yet, use the default
+        //  TODO: determine which use the texture has and pull appropriate default based on that
+        if (t->generation == INVALID_ID) {
+            t = shader->default_diffuse;
+
+            // reset the descriptor generation if using the default texture
+            *descriptor_generation = INVALID_ID;
+        }
 
         // check if the descriptor needs updating first
         if (t && (*descriptor_generation != t->generation || *descriptor_generation == INVALID_ID)) {

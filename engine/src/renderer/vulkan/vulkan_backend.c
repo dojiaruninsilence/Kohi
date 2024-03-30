@@ -239,9 +239,9 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
 
     // create built in shaders
     // create an object shader, pass in addresses to the context and the object shader
-    if (!vulkan_object_shader_create(&context, &context.object_shader)) {  // if it fails
-        KERROR("Error loading built-in basic_lighting shader.");           // throw an error
-        return false;                                                      // and boot out
+    if (!vulkan_object_shader_create(&context, backend->default_diffuse, &context.object_shader)) {  // if it fails
+        KERROR("Error loading built-in basic_lighting shader.");                                     // throw an error
+        return false;                                                                                // and boot out
     }
 
     // create buffers
@@ -920,11 +920,14 @@ void vulkan_renderer_destroy_texture(texture* texture) {
 
     vulkan_texture_data* data = (vulkan_texture_data*)texture->internal_data;  // conveneince pointer
 
-    vulkan_image_destroy(&context, &data->image);                                       // destoy the image
-    kzero_memory(&data->image, sizeof(vulkan_image));                                   // zero out the memory from the image
-    vkDestroySampler(context.device.logical_device, data->sampler, context.allocator);  // destroy the sampler
-    data->sampler = 0;                                                                  // zero out the sampler
+    if (data) {
+        vulkan_image_destroy(&context, &data->image);                                       // destoy the image
+        kzero_memory(&data->image, sizeof(vulkan_image));                                   // zero out the memory from the image
+        vkDestroySampler(context.device.logical_device, data->sampler, context.allocator);  // destroy the sampler
+        data->sampler = 0;                                                                  // zero out the sampler
 
-    kfree(texture->internal_data, sizeof(vulkan_texture_data), MEMORY_TAG_TEXTURE);  // free the kallocate memory for internal data
-    kzero_memory(texture, sizeof(struct texture));                                   // zero out the memory of the texture
+        kfree(texture->internal_data, sizeof(vulkan_texture_data), MEMORY_TAG_TEXTURE);  // free the kallocate memory for internal data
+    }
+
+    kzero_memory(texture, sizeof(struct texture));  // zero out the memory of the texture
 }
