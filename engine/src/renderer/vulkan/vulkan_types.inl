@@ -150,6 +150,7 @@ typedef struct vulkan_pipeline {
 typedef struct vulkan_descriptor_state {
     // one per frame
     u32 generations[3];  // has this descritor been updated or does it need to be updated
+    u32 ids[3];          // texture ids
 } vulkan_descriptor_state;
 
 #define VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT 2     // the amount per object
@@ -164,7 +165,7 @@ typedef struct vulkan_object_shader_object_state {  // this struct is one per ob
 // max number of objects - this is a temporary thing
 #define VULKAN_OBJECT_MAX_OBJECT_COUNT 1024
 
-typedef struct vulkan_object_shader {
+typedef struct vulkan_material_shader {
     // vertex, fragment, ect
     vulkan_shader_stage stages[OBJECT_SHADER_STAGE_COUNT];  // hold an array of shader stages, using the count of object shader stages this struct will hold
 
@@ -193,13 +194,10 @@ typedef struct vulkan_object_shader {
     // TODO: make dynamic
     vulkan_object_shader_object_state object_states[VULKAN_OBJECT_MAX_OBJECT_COUNT];
 
-    // pointers to default textures
-    texture* default_diffuse;
-
     // pipeline
     vulkan_pipeline pipeline;  // hold the vulkan pipeline struct
 
-} vulkan_object_shader;
+} vulkan_material_shader;
 
 // this is where we hold all of our static data for this renderer
 typedef struct vulkan_context {
@@ -257,7 +255,7 @@ typedef struct vulkan_context {
 
     b8 recreating_swapchain;  // a state that needs to be tracked in the render loop
 
-    vulkan_object_shader object_shader;  // where we store the object shader infos
+    vulkan_material_shader material_shader;  // where we store the object shader infos
 
     u64 geometry_vertex_offset;  // offset to keep track of everytime that we load data into the buffer
     u64 geometry_index_offset;   // offset to keep track of everytime that we load data into the buffer

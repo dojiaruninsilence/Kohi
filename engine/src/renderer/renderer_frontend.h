@@ -21,7 +21,6 @@ KAPI void renderer_set_view(mat4 view);
 // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
 void renderer_create_texture(
     const char* name,
-    b8 auto_release,
     i32 width,
     i32 height,
     i32 channel_count,

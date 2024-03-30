@@ -7,13 +7,11 @@
 #include "math/kmath.h"
 
 #include "resources/resource_types.h"
+#include "systems/texture_system.h"
 
 // TODO: temporary
 #include "core/kstring.h"
 #include "core/event.h"
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "vendor/stb_image.h"
 // TODO: end temporary
 
 // where we're going to store all of the info for the renderer systems state
@@ -24,99 +22,13 @@ typedef struct renderer_system_state {
     f32 near_clip;             // hang on to the near_clip value
     f32 far_clip;              // hang on to the far_clip value
 
-    texture default_texture;
-
     // TODO: temporary
-    texture test_diffuse;
+    texture* test_diffuse;
     // TODO: end temporary
 } renderer_system_state;
 
 // hold a pointer to the renderer systen state internally
 static renderer_system_state* state_ptr;
-
-void create_texture(texture* t) {
-    kzero_memory(t, sizeof(texture));
-    t->generation = INVALID_ID;
-}
-
-b8 load_texture(const char* texture_name, texture* t) {
-    // TODO: should be able to be located anywhere
-    char* format_str = "assets/textures/%s.%s";
-    const i32 required_channel_count = 4;    // we require 4 channels, if less we add
-    stbi_set_flip_vertically_on_load(true);  // images are technically stored upside down, this rights them
-    char full_file_path[512];
-
-    // TODO: try different extentions
-    string_format(full_file_path, format_str, texture_name, "png");
-
-    // use a temporary texture to load into
-    texture temp_texture;
-
-    // opens the file and loads the data, saves an 8 bit integer array
-    u8* data = stbi_load(
-        full_file_path,
-        (i32*)&temp_texture.width,  // have to convert these 3 u32s to i32s
-        (i32*)&temp_texture.height,
-        (i32*)&temp_texture.channel_count,  // how many channels image has
-        required_channel_count);            // what is required channels, will convert if they are different
-
-    temp_texture.channel_count = required_channel_count;  // if the image has the wrong channel count overwrite it here
-
-    if (data) {
-        u32 current_generation = t->generation;  // in case the texture has already been loaded, hang on to the id number
-        t->generation = INVALID_ID;
-
-        u64 total_size = temp_texture.width * temp_texture.height * required_channel_count;
-        // check for transparency
-        b32 has_transparency = false;
-        for (u64 i = 0; i < total_size; i += required_channel_count) {  // iterate over all of the pixels(count by number of channels)
-            u8 a = data[i + 3];                                         // copy the a channel of the pixel
-            if (a < 255) {                                              // if the a channel is less than 255 the pixel is at least partially transparent
-                has_transparency = true;
-                break;
-            }
-        }
-
-        if (stbi_failure_reason()) {                                                                       // returns a value if there was a failure, 0 if success
-            KWARN("load_texture() failed to load file '%s' : %s", full_file_path, stbi_failure_reason());  // warn out the failure
-        }
-
-        // aquire internal texture resources and upload to GPU
-        renderer_create_texture(
-            texture_name,
-            true,
-            temp_texture.width,
-            temp_texture.height,
-            temp_texture.channel_count,
-            data,
-            has_transparency,
-            &temp_texture);
-
-        // take a copy of the old texture
-        texture old = *t;  // derefence and save to old
-
-        // assign the temp texture to the pointer
-        *t = temp_texture;  // dereference and save the temp texture
-
-        // destroy the old texture - to avoid leaking resources
-        renderer_destroy_texture(&old);
-
-        if (current_generation == INVALID_ID) {  // if this is the first one
-            t->generation = 0;                   // set generation to 0
-        } else {
-            t->generation = current_generation + 1;  // set generation to an increment generation by one
-        }
-
-        // clean up the data
-        stbi_image_free(data);
-        return true;
-    } else {
-        if (stbi_failure_reason()) {
-            KWARN("load_texture() failed to load file '%s' : %s", full_file_path, stbi_failure_reason());
-        }
-        return false;
-    }
-}
 
 // TODO: temporary
 b8 event_on_debug_event(u16 code, void* sender, void* listener_inst, event_context data) {
@@ -125,11 +37,19 @@ b8 event_on_debug_event(u16 code, void* sender, void* listener_inst, event_conte
         "paving",
         "paving2"};
     static i8 choice = 2;
+
+    // save off the old name
+    const char* old_name = names[choice];
+
     choice++;     // increment
     choice %= 3;  // then mod back to 0. still need to learn this
 
     // load up the new texture
-    load_texture(names[choice], &state_ptr->test_diffuse);
+    state_ptr->test_diffuse = texture_system_aquire(names[choice], true);
+
+    // release the old texture
+    texture_system_release(old_name);
+
     return true;
 }
 // TODO: end temporary
@@ -146,9 +66,6 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     // TODO: temporary
     event_register(EVENT_CODE_DEBUG0, state_ptr, event_on_debug_event);
     // TODO: end temporary
-
-    // take a pointer to defaolt textures for use in the backend
-    state_ptr->backend.default_diffuse = &state_ptr->default_texture;
 
     // TODO: this needs to be made configurable
     renderer_backend_create(RENDERER_BACKEND_TYPE_VULKAN, &state_ptr->backend);  // create the renderer back end, hard coded to vulcan for now and an address to the backend created above
@@ -169,51 +86,6 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     state_ptr->view = mat4_translation((vec3){0, 0, 30.0f});
     state_ptr->view = mat4_inverse(state_ptr->view);
 
-    // NOTE: create default texture, a 256x256 blue/white checkerboard pattern
-    // this is done in code to eliminate asset dependencies
-    KTRACE("Creating default texture...");
-    const u32 tex_dimension = 256;                          // size the texture will be in width and height
-    const u32 channels = 4;                                 // channels
-    const u32 pixel_count = tex_dimension * tex_dimension;  // w * h
-    u8 pixels[pixel_count * channels];                      // dimensions * channels
-    // u8* pixels = kallocate(sizeof(u8) * pixel_count * bpp, MEMORY_TAG_TEXTURE);
-    kset_memory(pixels, 255, sizeof(u8) * pixel_count * channels);  // fill the array with 255 which makes it white
-
-    // each pixel
-    for (u64 row = 0; row < tex_dimension; ++row) {      // iterate through all the rows
-        for (u64 col = 0; col < tex_dimension; ++col) {  // iterate though all the columns
-            u64 index = (row * tex_dimension) + col;
-            u64 index_bpp = index * channels;
-            if (row % 2) {                      // if the row is even
-                if (col % 2) {                  // and the col is even
-                    pixels[index_bpp + 0] = 0;  // flip the r channel to zero
-                    pixels[index_bpp + 1] = 0;  // flip the g channel to zero
-                }
-            } else {                            // if the row is odd
-                if (!(col % 2)) {               // and the col is odd
-                    pixels[index_bpp + 0] = 0;  // flip the r channel to zero
-                    pixels[index_bpp + 1] = 0;  // flip the g channel to zero
-                }
-            }
-        }
-    }
-    // create the texture
-    renderer_create_texture(
-        "default",      // named default
-        false,          // it doesnt auto release
-        tex_dimension,  // w
-        tex_dimension,  // h
-        4,              // channels
-        pixels,         // pixels in for pixel data
-        false,          // no transparency
-        &state_ptr->default_texture);
-
-    // manually set the texture generation to invalid since this is a default texture
-    state_ptr->default_texture.generation = INVALID_ID;
-
-    // TODO: load other textures
-    create_texture(&state_ptr->test_diffuse);
-
     return true;
 }
 
@@ -223,11 +95,6 @@ void renderer_system_shutdown(void* state) {
         // TODO: temporary
         event_unregister(EVENT_CODE_DEBUG0, state_ptr, event_on_debug_event);
         // TODO: end temporary
-
-        // destroy textures
-        renderer_destroy_texture(&state_ptr->default_texture);  // destroy the default texture
-
-        renderer_destroy_texture(&state_ptr->test_diffuse);  // destroy the test texture
 
         state_ptr->backend.shutdown(&state_ptr->backend);  // call backend shut down -- another pointer function from renderer types
     }
@@ -278,7 +145,14 @@ b8 renderer_draw_frame(render_packet* packet) {
         geometry_render_data data = {};
         data.object_id = 0;  // TODO: actual id
         data.model = model;
-        data.textures[0] = &state_ptr->test_diffuse;  // set to the default texture
+
+        // TODO: temporary
+        // grab the default if does not exist
+        if (!state_ptr->test_diffuse) {
+            state_ptr->test_diffuse = texture_system_get_default_texture();
+        }
+
+        data.textures[0] = state_ptr->test_diffuse;  // set to the default texture
         state_ptr->backend.update_object(data);
 
         // end the frame if this fails, it is likely unrecoverable
@@ -301,14 +175,13 @@ void renderer_set_view(mat4 view) {
 // just pass through - create texture
 void renderer_create_texture(
     const char* name,
-    b8 auto_release,
     i32 width,
     i32 height,
     i32 channel_count,
     const u8* pixels,
     b8 has_transparency,
     struct texture* out_texture) {
-    state_ptr->backend.create_texture(name, auto_release, width, height, channel_count, pixels, has_transparency, out_texture);
+    state_ptr->backend.create_texture(name, width, height, channel_count, pixels, has_transparency, out_texture);
 }
 
 // just pass through - destroy texture

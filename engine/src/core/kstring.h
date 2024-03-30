@@ -10,6 +10,9 @@ KAPI char* string_duplicate(const char* str);
 // case sensitive string comparison. true if they are the same otherwise its false
 KAPI b8 strings_equal(const char* str0, const char* str1);  // takes in pointers to 2 strings
 
+// case insensitive string comparison. true if they are the same otherwise its false
+KAPI b8 strings_equali(const char* str0, const char* str1);  // takes in pointers to 2 strings
+
 // performs string formatting to dest given format string and parameters
 // pass in a pointer to a destination that is large enough to hold the final string, the format to use, aand the dots represent any number of arguments to throw in
 KAPI i32 string_format(char* dest, const char* format, ...);

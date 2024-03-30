@@ -39,9 +39,6 @@ typedef struct geometry_render_data {
 typedef struct renderer_backend {
     u64 frame_number;  // keep track of the frames rendered
 
-    // pointers to default textures
-    texture* default_diffuse;
-
     // pointer functions, so we can eventually have multiple backends and not have to change all the code higher level than here
 
     b8 (*initialize)(struct renderer_backend* backend, const char* application_name);  // funtion ptr called initialize, takes in a ptr to a renderer backend, pointer to the application name
@@ -69,7 +66,6 @@ typedef struct renderer_backend {
     // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
     void (*create_texture)(
         const char* name,
-        b8 auto_release,
         i32 width,
         i32 height,
         i32 channel_count,

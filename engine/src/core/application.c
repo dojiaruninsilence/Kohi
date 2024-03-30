@@ -14,6 +14,9 @@
 
 #include "renderer/renderer_frontend.h"
 
+// systems
+#include "systems/texture_system.h"
+
 // there will only be one instance of application running
 
 typedef struct application_state {
@@ -52,6 +55,10 @@ typedef struct application_state {
     // renderer system state allocation
     u64 renderer_system_memory_requirement;  // where the amount of storage that is needed for the renderer system is stored
     void* renderer_system_state;             // a pointer to where the renderer state is being store
+
+    // texture system state allocation
+    u64 texture_system_memory_requirement;  // where the amount of storage that is needed fot the texture system is stored
+    void* texture_system_state;             // a pointer to where the texture system state is being stored
 
 } application_state;
 
@@ -158,6 +165,19 @@ b8 application_create(game* game_inst) {
         return false;                                                                                                                                 // and boot out
     }
 
+    // texture system
+    texture_system_config texture_sys_config;      // define the texture system configuration struct
+    texture_sys_config.max_texture_count = 65536;  // max number of textures that can be loaded
+    // on the first pass just pass in the pointer to the texture system memory requirement field, and the configuration struct, leave the rest 0
+    texture_system_initialize(&app_state->texture_system_memory_requirement, 0, texture_sys_config);
+    // allocate memory from the linear allocator for the state of texture system, and give the pointer to the memory to texture system state
+    app_state->texture_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->texture_system_memory_requirement);
+    // second pass actually initializes the texture system, pass it a pointer to the required memory, and a pointer to where the memory is, and a pointer to the application name
+    if (!texture_system_initialize(&app_state->texture_system_memory_requirement, app_state->texture_system_state, texture_sys_config)) {  // if it fails
+        KFATAL("Failed to initialize texture system. Application cannot continue");                                                        // throw a fatal error
+        return false;                                                                                                                      // and boot out
+    }
+
     // initialize the game
     if (!app_state->game_inst->initialize(app_state->game_inst)) {
         KFATAL("Game failed to initialize.")
@@ -252,6 +272,9 @@ b8 application_run() {
 
     // shutdown the input system  -  pass it the pointer to where the state is being stored
     input_system_shutdown(app_state->input_system_state);
+
+    // shutdown the texture system - pass it a pointer to where the state is being stored
+    texture_system_shutdown(app_state->texture_system_state);
 
     // shutdown the renderer  -  pass it the pointer to where the state is being stored
     renderer_system_shutdown(app_state->renderer_system_state);

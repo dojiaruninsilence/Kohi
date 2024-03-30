@@ -1,4 +1,4 @@
-#include "vulkan_object_shader.h"
+#include "vulkan_material_shader.h"
 
 #include "core/logger.h"
 #include "core/kmemory.h"
@@ -9,13 +9,12 @@
 #include "renderer/vulkan/vulkan_pipeline.h"
 #include "renderer/vulkan/vulkan_buffer.h"
 
-#define BUILTIN_SHADER_NAME_OBJECT "Builtin.ObjectShader"  // this is part of the filename that we are going to load will be concatenated with the stage name and extension -- for custom shaders and such this will be different
+#include "systems/texture_system.h"
+
+#define BUILTIN_SHADER_NAME_MATERIAL "Builtin.MaterialShader"  // this is part of the filename that we are going to load will be concatenated with the stage name and extension -- for custom shaders and such this will be different
 
 // create a vulkan object shader, pass in a pointer to the context and a pointer to where the stucture for the shader will be held
-b8 vulkan_object_shader_create(vulkan_context* context, texture* default_diffuse, vulkan_object_shader* out_shader) {
-    // take and store a copy of the default texture pointers
-    out_shader->default_diffuse = default_diffuse;
-
+b8 vulkan_material_shader_create(vulkan_context* context, vulkan_material_shader* out_shader) {
     // shader module initialize per stage
     char stage_type_strs[OBJECT_SHADER_STAGE_COUNT][5] = {"vert", "frag"};  // set up a short array of strings to obtain the various stage names that we will need for this shader
     // store the stage types - use the shader stage count for the size, and input vulkan macros for the types(vertex and fragment for now)
@@ -24,9 +23,9 @@ b8 vulkan_object_shader_create(vulkan_context* context, texture* default_diffuse
     for (u32 i = 0; i < OBJECT_SHADER_STAGE_COUNT; ++i) {  // iterate through all the stages
         // create shader modules - contains the logic for programmable shaders
         // use our funtion, pass in the context, the shader name object, the stage name at index i, the stage type at index i, and a pointer to the resulting shader stages array
-        if (!create_shader_module(context, BUILTIN_SHADER_NAME_OBJECT, stage_type_strs[i], stage_types[i], i, out_shader->stages)) {  // if it fails
-            KERROR("Unable to create %s shader module for '%s'.", stage_type_strs[i], BUILTIN_SHADER_NAME_OBJECT);                    // throw an error
-            return false;                                                                                                             // boot out
+        if (!create_shader_module(context, BUILTIN_SHADER_NAME_MATERIAL, stage_type_strs[i], stage_types[i], i, out_shader->stages)) {  // if it fails
+            KERROR("Unable to create %s shader module for '%s'.", stage_type_strs[i], BUILTIN_SHADER_NAME_MATERIAL);                    // throw an error
+            return false;                                                                                                               // boot out
         }
     }
 
@@ -214,7 +213,7 @@ b8 vulkan_object_shader_create(vulkan_context* context, texture* default_diffuse
 }
 
 // create a vulkan object shader, pass in a pointer to the context and a pointer to where the stucture for the shader is held
-void vulkan_object_shader_destroy(vulkan_context* context, struct vulkan_object_shader* shader) {
+void vulkan_material_shader_destroy(vulkan_context* context, struct vulkan_material_shader* shader) {
     // convenience definition
     VkDevice logical_device = context->device.logical_device;
 
@@ -246,14 +245,14 @@ void vulkan_object_shader_destroy(vulkan_context* context, struct vulkan_object_
 }
 
 // use a vulkan object shader, pass in a pointer to the context, and a pointer to where the shader struct is held
-void vulkan_object_shader_use(vulkan_context* context, struct vulkan_object_shader* shader) {
+void vulkan_material_shader_use(vulkan_context* context, struct vulkan_material_shader* shader) {
     u32 image_index = context->image_index;  // get the current image index from the context
     // bind the pipline, pass in the graphics command buffer at the current image index, bind to graphics bind point of the pipeline, and an address to the pipline to bind
     vulkan_pipeline_bind(&context->graphics_command_buffers[image_index], VK_PIPELINE_BIND_POINT_GRAPHICS, &shader->pipeline);
 }
 
 // update the object shaders global state, , pass in a pointer to the context, and a pointer to where the shader struct is held
-void vulkan_object_shader_update_global_state(vulkan_context* context, struct vulkan_object_shader* shader, f32 delta_time) {
+void vulkan_material_shader_update_global_state(vulkan_context* context, struct vulkan_material_shader* shader, f32 delta_time) {
     u32 image_index = context->image_index;                                                  // convenience
     VkCommandBuffer command_buffer = context->graphics_command_buffers[image_index].handle;  // define a command buffer to use
     VkDescriptorSet global_descriptor = shader->global_descriptor_sets[image_index];         // define a descriptor to update
@@ -287,7 +286,7 @@ void vulkan_object_shader_update_global_state(vulkan_context* context, struct vu
 }
 
 // this is only temporary, this will be moving
-void vulkan_object_shader_update_object(vulkan_context* context, struct vulkan_object_shader* shader, geometry_render_data data) {
+void vulkan_material_shader_update_object(vulkan_context* context, struct vulkan_material_shader* shader, geometry_render_data data) {
     u32 image_index = context->image_index;                                                  // convenience
     VkCommandBuffer command_buffer = context->graphics_command_buffers[image_index].handle;  // define a command buffer to use
 
@@ -350,18 +349,19 @@ void vulkan_object_shader_update_object(vulkan_context* context, struct vulkan_o
     for (u32 sampler_index = 0; sampler_index < sampler_count; ++sampler_index) {                                  // iterate through all of the samplers
         texture* t = data.textures[sampler_index];                                                                 // align the textures with the samplers
         u32* descriptor_generation = &object_state->descriptor_states[descriptor_index].generations[image_index];  // get a pointer to the descriptor generation at image index
+        u32* descriptor_id = &object_state->descriptor_states[descriptor_index].ids[image_index];                  // get a pointer to the texture id
 
         // if the texture hasn't been loaded yet, use the default
         //  TODO: determine which use the texture has and pull appropriate default based on that
         if (t->generation == INVALID_ID) {
-            t = shader->default_diffuse;
+            t = texture_system_get_default_texture();
 
             // reset the descriptor generation if using the default texture
             *descriptor_generation = INVALID_ID;
         }
 
         // check if the descriptor needs updating first
-        if (t && (*descriptor_generation != t->generation || *descriptor_generation == INVALID_ID)) {
+        if (t && (*descriptor_id != t->id || *descriptor_generation != t->generation || *descriptor_generation == INVALID_ID)) {
             vulkan_texture_data* internal_data = (vulkan_texture_data*)t->internal_data;  // convenience
 
             // assign view and sampler
@@ -396,7 +396,7 @@ void vulkan_object_shader_update_object(vulkan_context* context, struct vulkan_o
 }
 
 // pull in resources from outside the engine like meshes, and textures and such, and tag it with an id, to keep track of them without having to keep pointers
-b8 vulkan_object_shader_acquire_resources(vulkan_context* context, struct vulkan_object_shader* shader, u32* out_object_id) {
+b8 vulkan_material_shader_acquire_resources(vulkan_context* context, struct vulkan_material_shader* shader, u32* out_object_id) {
     // TODO: free list
     *out_object_id = shader->object_uniform_buffer_index;  // derenferenc the out abject id and store the buffer index value there
     shader->object_uniform_buffer_index++;                 // increment the buffer index
@@ -406,6 +406,7 @@ b8 vulkan_object_shader_acquire_resources(vulkan_context* context, struct vulkan
     for (u32 i = 0; i < VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT; ++i) {                     // iterate through the descriptors
         for (u32 j = 0; j < 3; ++j) {                                                     // set all three generations to invalid id
             object_state->descriptor_states[i].generations[j] = INVALID_ID;
+            object_state->descriptor_states[i].ids[j] = INVALID_ID;
         }
     }
 
@@ -430,7 +431,7 @@ b8 vulkan_object_shader_acquire_resources(vulkan_context* context, struct vulkan
     return true;
 }
 
-void vulkan_object_shader_release_resources(vulkan_context* context, struct vulkan_object_shader* shader, u32 object_id) {
+void vulkan_material_shader_release_resources(vulkan_context* context, struct vulkan_material_shader* shader, u32 object_id) {
     vulkan_object_shader_object_state* object_state = &shader->object_states[object_id];  // get a pointer to the objects state
 
     const u32 descriptor_set_count = 3;
@@ -443,6 +444,7 @@ void vulkan_object_shader_release_resources(vulkan_context* context, struct vulk
     for (u32 i = 0; i < VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT; ++i) {  // iterate through the descriptors
         for (u32 j = 0; j < 3; ++j) {                                  // set all three generations to invalid id
             object_state->descriptor_states[i].generations[j] = INVALID_ID;
+            object_state->descriptor_states[i].ids[j] = INVALID_ID;
         }
     }
 

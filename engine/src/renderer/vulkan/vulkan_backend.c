@@ -24,7 +24,7 @@
 #include "platform/platform.h"
 
 // shaders
-#include "shaders/vulkan_object_shader.h"
+#include "shaders/vulkan_material_shader.h"
 
 // create vulkan context - there will only be one
 static vulkan_context context;
@@ -239,9 +239,9 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
 
     // create built in shaders
     // create an object shader, pass in addresses to the context and the object shader
-    if (!vulkan_object_shader_create(&context, backend->default_diffuse, &context.object_shader)) {  // if it fails
-        KERROR("Error loading built-in basic_lighting shader.");                                     // throw an error
-        return false;                                                                                // and boot out
+    if (!vulkan_material_shader_create(&context, &context.material_shader)) {  // if it fails
+        KERROR("Error loading built-in basic_lighting shader.");               // throw an error
+        return false;                                                          // and boot out
     }
 
     // create buffers
@@ -281,7 +281,7 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     upload_data_range(&context, context.device.graphics_command_pool, 0, context.device.graphics_queue, &context.object_index_buffer, 0, sizeof(u32) * index_count, indices);
 
     u32 object_id = 0;
-    if (!vulkan_object_shader_acquire_resources(&context, &context.object_shader, &object_id)) {
+    if (!vulkan_material_shader_acquire_resources(&context, &context.material_shader, &object_id)) {
         KERROR("Failed to aquire shader resources.");
         return false;
     }
@@ -304,7 +304,7 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
     vulkan_buffer_destroy(&context, &context.object_index_buffer);
 
     // destroy the vulkan object shader
-    vulkan_object_shader_destroy(&context, &context.object_shader);  // pass in addresses to the context, and the object shader to be destoyed
+    vulkan_material_shader_destroy(&context, &context.material_shader);  // pass in addresses to the context, and the object shader to be destoyed
 
     // destroy syncronization objects
     for (u8 i = 0; i < context.swapchain.max_frames_in_flight; ++i) {  // iterate through all the max frames in flight
@@ -494,16 +494,16 @@ void vulkan_renderer_update_global_state(mat4 projection, mat4 view, vec3 view_p
     vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // store a pointer to the current graphics command buffer
 
     // use the shader
-    vulkan_object_shader_use(&context, &context.object_shader);
+    vulkan_material_shader_use(&context, &context.material_shader);
 
     // pass through the view, and projection
-    context.object_shader.global_ubo.projection = projection;
-    context.object_shader.global_ubo.view = view;
+    context.material_shader.global_ubo.projection = projection;
+    context.material_shader.global_ubo.view = view;
 
     // TODO: other ubo properties
 
     // update the global state
-    vulkan_object_shader_update_global_state(&context, &context.object_shader, context.frame_delta_time);
+    vulkan_material_shader_update_global_state(&context, &context.material_shader, context.frame_delta_time);
 }
 
 b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) {
@@ -588,10 +588,10 @@ void vulkan_backend_update_object(geometry_render_data data) {
     vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // conveinience pointer
 
     // all we are doing for now is calling our shader update object, pass in the context the object shader, and the model to pass in
-    vulkan_object_shader_update_object(&context, &context.object_shader, data);
+    vulkan_material_shader_update_object(&context, &context.material_shader, data);
 
     // TODO: temporary test code
-    vulkan_object_shader_use(&context, &context.object_shader);
+    vulkan_material_shader_use(&context, &context.material_shader);
 
     // Bind vertex buffer at offset.
     VkDeviceSize offsets[1] = {0};
@@ -806,7 +806,6 @@ b8 create_buffers(vulkan_context* context) {
 // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
 void vulkan_renderer_create_texture(
     const char* name,
-    b8 auto_release,
     i32 width,
     i32 height,
     i32 channel_count,
