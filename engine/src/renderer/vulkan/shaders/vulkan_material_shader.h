@@ -19,5 +19,5 @@ void vulkan_material_shader_update_global_state(vulkan_context* context, struct 
 void vulkan_material_shader_update_object(vulkan_context* context, struct vulkan_material_shader* shader, geometry_render_data data);
 
 // pull in resources from outside the engine like meshes, and textures and such, and tag it with an id, to keep track of them without having to keep pointers
-b8 vulkan_material_shader_acquire_resources(vulkan_context* context, struct vulkan_material_shader* shader, u32* out_object_id);
-void vulkan_material_shader_release_resources(vulkan_context* context, struct vulkan_material_shader* shader, u32 object_id);
+b8 vulkan_material_shader_acquire_resources(vulkan_context* context, struct vulkan_material_shader* shader, material* material);
+void vulkan_material_shader_release_resources(vulkan_context* context, struct vulkan_material_shader* shader, material* material);

@@ -16,6 +16,7 @@
 
 // systems
 #include "systems/texture_system.h"
+#include "systems/material_system.h"
 
 // there will only be one instance of application running
 
@@ -59,6 +60,10 @@ typedef struct application_state {
     // texture system state allocation
     u64 texture_system_memory_requirement;  // where the amount of storage that is needed fot the texture system is stored
     void* texture_system_state;             // a pointer to where the texture system state is being stored
+
+    // material system state allocation
+    u64 material_system_memory_requirement;  // where the amount of storage that is needed fot the material system is stored
+    void* material_system_state;             // a pointer to where the material system state is being stored
 
 } application_state;
 
@@ -178,6 +183,19 @@ b8 application_create(game* game_inst) {
         return false;                                                                                                                      // and boot out
     }
 
+    // material system
+    material_system_config material_sys_config;     // define the material system configuration struct
+    material_sys_config.max_material_count = 4096;  // max number of material that can be loaded
+    // on the first pass just pass in the pointer to the material system memory requirement field, and the configuration struct, leave the rest 0
+    material_system_initialize(&app_state->material_system_memory_requirement, 0, material_sys_config);
+    // allocate memory from the linear allocator for the state of material system, and give the pointer to the memory to material system state
+    app_state->material_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->material_system_memory_requirement);
+    // second pass actually initializes the material system, pass it a pointer to the required memory, and a pointer to where the memory is, and a pointer to the application name
+    if (!material_system_initialize(&app_state->material_system_memory_requirement, app_state->material_system_state, material_sys_config)) {  // if it fails
+        KFATAL("Failed to initialize material system. Application cannot continue");                                                           // throw a fatal error
+        return false;                                                                                                                          // and boot out
+    }
+
     // initialize the game
     if (!app_state->game_inst->initialize(app_state->game_inst)) {
         KFATAL("Game failed to initialize.")
@@ -272,6 +290,9 @@ b8 application_run() {
 
     // shutdown the input system  -  pass it the pointer to where the state is being stored
     input_system_shutdown(app_state->input_system_state);
+
+    // shutdown the material system - pass it a pointer to where the state is being stored
+    material_system_shutdown(app_state->material_system_state);
 
     // shutdown the texture system - pass it a pointer to where the state is being stored
     texture_system_shutdown(app_state->texture_system_state);

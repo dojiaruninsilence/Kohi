@@ -28,14 +28,13 @@ void vulkan_backend_update_object(geometry_render_data data);
 
 // create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
 // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
-void vulkan_renderer_create_texture(
-    const char* name,
-    i32 width,
-    i32 height,
-    i32 channel_count,
-    const u8* pixels,
-    b8 has_transparency,
-    texture* out_texture);
+void vulkan_renderer_create_texture(const u8* pixels, texture* texture);
 
 // destroy a texture
 void vulkan_renderer_destroy_texture(texture* texture);
+
+// create a material
+b8 vulkan_renderer_create_material(struct material* material);
+
+// destroy a material
+void vulkan_renderer_destroy_material(struct material* material);

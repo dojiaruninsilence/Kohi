@@ -20,18 +20,20 @@ typedef struct global_uniform_object {
 } global_uniform_object;
 
 // this name will change, but for now - like the global ubo, but this one is for each object - so potentially updating every frame for every object
-typedef struct object_uniform_object {
+typedef struct material_uniform_object {
     vec4 diffuse_color;  // 16 bytes
     vec4 v_reserved0;    // 16 bytes, reserved for future use
     vec4 v_reserved1;    // 16 bytes, reserved for future use
     vec4 v_reserved2;    // 16 bytes, reserved for future use
-} object_uniform_object;
+    mat4 m_reserved0;    // 64 bytes, reserved for future use // added from future changes to limp along Shader system feature #38  https://github.com/travisvroman/kohi/pull/38
+    mat4 m_reserved1;    // 64 bytes, reserved for future use
+    mat4 m_reserved2;    // 64 bytes, reserved for future use
+} material_uniform_object;
 
 // where the data for geometry to be rendered is stored - and a way to pass the geometry to the renderer
 typedef struct geometry_render_data {
-    u32 object_id;          // each object going to have an id, so we dont have to hold pointers to everything
-    mat4 model;             // model matrix for a batch of geometry
-    texture* textures[16];  // can have up to sixteen different texture pointers in an array
+    mat4 model;          // model matrix for a batch of geometry
+    material* material;  // hold a pointer to a material
 } geometry_render_data;
 
 // one of the places object oriented programing makes sense
@@ -64,17 +66,14 @@ typedef struct renderer_backend {
 
     // create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
     // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
-    void (*create_texture)(
-        const char* name,
-        i32 width,
-        i32 height,
-        i32 channel_count,
-        const u8* pixels,
-        b8 has_transparency,
-        struct texture* out_texture);
+    void (*create_texture)(const u8* pixels, struct texture* texture);
 
     // destroy a texture
     void (*destroy_texture)(struct texture* texture);
+
+    // materials
+    b8 (*create_material)(struct material* material);
+    void (*destroy_material)(struct material* material);
 
 } renderer_backend;
 

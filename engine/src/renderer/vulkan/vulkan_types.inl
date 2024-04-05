@@ -145,7 +145,7 @@ typedef struct vulkan_pipeline {
     VkPipelineLayout pipeline_layout;  // store the piplines layout
 } vulkan_pipeline;
 
-#define OBJECT_SHADER_STAGE_COUNT 2  // set the object shader count to 2 for now - these are going to be the vertex and fragment shaders for now
+#define MATERIAL_SHADER_STAGE_COUNT 2  // set the object shader count to 2 for now - these are going to be the vertex and fragment shaders for now
 
 typedef struct vulkan_descriptor_state {
     // one per frame
@@ -153,21 +153,23 @@ typedef struct vulkan_descriptor_state {
     u32 ids[3];          // texture ids
 } vulkan_descriptor_state;
 
-#define VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT 2     // the amount per object
-typedef struct vulkan_object_shader_object_state {  // this struct is one per object, every object has one
+#define VULKAN_MATERIAL_SHADER_DESCRIPTOR_COUNT 2  // the amount per object
+#define VULKAN_MATERIAL_SHADER_SAMPLER_COUNT 1     // amount of samplers per object
+
+typedef struct vulkan_material_shader_instance_state {  // this struct is one per object, every object has one
     // per frame
     VkDescriptorSet descriptor_sets[3];
 
     // per descriptor
-    vulkan_descriptor_state descriptor_states[VULKAN_OBJECT_SHADER_DESCRIPTOR_COUNT];
-} vulkan_object_shader_object_state;
+    vulkan_descriptor_state descriptor_states[VULKAN_MATERIAL_SHADER_DESCRIPTOR_COUNT];
+} vulkan_material_shader_instance_state;
 
 // max number of objects - this is a temporary thing
-#define VULKAN_OBJECT_MAX_OBJECT_COUNT 1024
+#define VULKAN_MAX_MATERIAL_COUNT 1024
 
 typedef struct vulkan_material_shader {
     // vertex, fragment, ect
-    vulkan_shader_stage stages[OBJECT_SHADER_STAGE_COUNT];  // hold an array of shader stages, using the count of object shader stages this struct will hold
+    vulkan_shader_stage stages[MATERIAL_SHADER_STAGE_COUNT];  // hold an array of shader stages, using the count of object shader stages this struct will hold
 
     // descriptor stuffs
     VkDescriptorPool global_descriptor_pool;             // descriptors are like command buffers, in that that come from and return too a pool
@@ -175,6 +177,7 @@ typedef struct vulkan_material_shader {
 
     // one descriptor set per frame - max 3 for triple-buffering
     VkDescriptorSet global_descriptor_sets[3];
+    b8 descriptor_updated[3];
 
     // global uniform object
     global_uniform_object global_ubo;  // store global object stuffs like view, and projection matrices
@@ -191,8 +194,10 @@ typedef struct vulkan_material_shader {
     // TODO: manage a free list of some kind here instead
     u32 object_uniform_buffer_index;
 
+    texture_use sampler_uses[VULKAN_MATERIAL_SHADER_SAMPLER_COUNT];
+
     // TODO: make dynamic
-    vulkan_object_shader_object_state object_states[VULKAN_OBJECT_MAX_OBJECT_COUNT];
+    vulkan_material_shader_instance_state instance_states[VULKAN_MAX_MATERIAL_COUNT];
 
     // pipeline
     vulkan_pipeline pipeline;  // hold the vulkan pipeline struct

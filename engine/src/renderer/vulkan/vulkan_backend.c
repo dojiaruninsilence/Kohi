@@ -280,12 +280,6 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     upload_data_range(&context, context.device.graphics_command_pool, 0, context.device.graphics_queue, &context.object_vertex_buffer, 0, sizeof(vertex_3d) * vert_count, verts);
     upload_data_range(&context, context.device.graphics_command_pool, 0, context.device.graphics_queue, &context.object_index_buffer, 0, sizeof(u32) * index_count, indices);
 
-    u32 object_id = 0;
-    if (!vulkan_material_shader_acquire_resources(&context, &context.material_shader, &object_id)) {
-        KERROR("Failed to aquire shader resources.");
-        return false;
-    }
-
     // TODO: end temp code
 
     // everything passed
@@ -804,25 +798,12 @@ b8 create_buffers(vulkan_context* context) {
 
 // create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
 // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
-void vulkan_renderer_create_texture(
-    const char* name,
-    i32 width,
-    i32 height,
-    i32 channel_count,
-    const u8* pixels,
-    b8 has_transparency,
-    texture* out_texture) {
-    // pass these through
-    out_texture->width = width;
-    out_texture->height = height;
-    out_texture->channel_count = channel_count;
-    out_texture->generation = INVALID_ID;  // default to invalid id
-
+void vulkan_renderer_create_texture(const u8* pixels, texture* texture) {
     // internal data creation
     // TODO: use an allocator for this - this will be done with a custom allocator as soon as we have the capability to
-    out_texture->internal_data = (vulkan_texture_data*)kallocate(sizeof(vulkan_texture_data), MEMORY_TAG_TEXTURE);
-    vulkan_texture_data* data = (vulkan_texture_data*)out_texture->internal_data;
-    VkDeviceSize image_size = width * height * channel_count;  // this is the number of pixels times the number of channels for those pixels - like the length of the pixels array
+    texture->internal_data = (vulkan_texture_data*)kallocate(sizeof(vulkan_texture_data), MEMORY_TAG_TEXTURE);
+    vulkan_texture_data* data = (vulkan_texture_data*)texture->internal_data;
+    VkDeviceSize image_size = texture->width * texture->height * texture->channel_count;  // this is the number of pixels times the number of channels for those pixels - like the length of the pixels array
 
     // NOTE:  assumes there are 8 bits per channel - there is logic that can detect this, just not going to add it yet
     VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
@@ -840,8 +821,8 @@ void vulkan_renderer_create_texture(
     vulkan_image_create(
         &context,          // pass in the context
         VK_IMAGE_TYPE_2D,  // is going to be a 2d image
-        width,             // pass in the size
-        height,
+        texture->width,    // pass in the size
+        texture->height,
         image_format,                                                                                                                          // had coded to rgba 8 bit per channel for now
         VK_IMAGE_TILING_OPTIMAL,                                                                                                               // tiling is optimal
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,  // the image is both a transfer sourc and destination, it can be sampled, can be used for a color attachement
@@ -909,8 +890,7 @@ void vulkan_renderer_create_texture(
         return;
     }
 
-    out_texture->has_transparency = has_transparency;  // pass through has transparency
-    out_texture->generation++;                         // incrememnt the generation - how many times this texture has been loaded, or refreshed
+    texture->generation++;  // incrememnt the generation - how many times this texture has been loaded, or refreshed
 }
 
 // destroy a texture
@@ -929,4 +909,33 @@ void vulkan_renderer_destroy_texture(texture* texture) {
     }
 
     kzero_memory(texture, sizeof(struct texture));  // zero out the memory of the texture
+}
+
+// create a material
+b8 vulkan_renderer_create_material(struct material* material) {
+    if (material) {
+        if (!vulkan_material_shader_acquire_resources(&context, &context.material_shader, material)) {
+            KERROR("vulkan_renderer_create_material - failed to acquire shader resources.");
+            return false;
+        }
+
+        KTRACE("Renderer: Material created.");
+        return true;
+    }
+
+    KERROR("vulkan_renderer_create_material - called with null ptr. creation failed");
+    return false;
+}
+
+// destroy a material
+void vulkan_renderer_destroy_material(struct material* material) {
+    if (material) {
+        if (material->internal_id != INVALID_ID) {
+            vulkan_material_shader_release_resources(&context, &context.material_shader, material);
+        } else {
+            KWARN("vulkan_renderer_destroy_material called with internal_id=INVALID_ID. nothing was done");
+        }
+    } else {
+        KWARN("vulkan_renderer_destroy_material called with nullptr. nothing was done");
+    }
 }

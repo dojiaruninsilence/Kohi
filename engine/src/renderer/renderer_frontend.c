@@ -8,6 +8,7 @@
 
 #include "resources/resource_types.h"
 #include "systems/texture_system.h"
+#include "systems/material_system.h"
 
 // TODO: temporary
 #include "core/kstring.h"
@@ -23,7 +24,7 @@ typedef struct renderer_system_state {
     f32 far_clip;              // hang on to the far_clip value
 
     // TODO: temporary
-    texture* test_diffuse;
+    material* test_material;
     // TODO: end temporary
 } renderer_system_state;
 
@@ -45,7 +46,11 @@ b8 event_on_debug_event(u16 code, void* sender, void* listener_inst, event_conte
     choice %= 3;  // then mod back to 0. still need to learn this
 
     // load up the new texture
-    state_ptr->test_diffuse = texture_system_aquire(names[choice], true);
+    state_ptr->test_material->diffuse_map.texture = texture_system_aquire(names[choice], true);
+    if (!state_ptr->test_material->diffuse_map.texture) {
+        KWARN("event_on_debug_event no texture! using default");
+        state_ptr->test_material->diffuse_map.texture = texture_system_get_default_texture();
+    }
 
     // release the old texture
     texture_system_release(old_name);
@@ -143,16 +148,26 @@ b8 renderer_draw_frame(render_packet* packet) {
         // quat rotation = quat_from_axis_angle(vec3_forward(), angle, false);
         // mat4 model = quat_to_rotation_matrix(rotation, vec3_zero());
         geometry_render_data data = {};
-        data.object_id = 0;  // TODO: actual id
         data.model = model;
 
         // TODO: temporary
-        // grab the default if does not exist
-        if (!state_ptr->test_diffuse) {
-            state_ptr->test_diffuse = texture_system_get_default_texture();
+        // create a default material if does not exist
+        if (!state_ptr->test_material) {
+            // automatic config
+            state_ptr->test_material = material_system_acquire("test_material");
+            if (!state_ptr->test_material) {
+                KWARN("Automatic material load failed, falling back to manual default material.");
+                // manual config
+                material_config config;
+                string_ncopy(config.name, "test_material", MATERIAL_NAME_MAX_LENGTH);
+                config.auto_release = false;
+                config.diffuse_colour = vec4_one();  // white
+                string_ncopy(config.diffuse_map_name, DEFAULT_TEXTURE_NAME, TEXTURE_NAME_MAX_LENGTH);
+                state_ptr->test_material = material_system_acquire_from_config(config);
+            }
         }
 
-        data.textures[0] = state_ptr->test_diffuse;  // set to the default texture
+        data.material = state_ptr->test_material;  // set to the default material
         state_ptr->backend.update_object(data);
 
         // end the frame if this fails, it is likely unrecoverable
@@ -173,18 +188,19 @@ void renderer_set_view(mat4 view) {
 }
 
 // just pass through - create texture
-void renderer_create_texture(
-    const char* name,
-    i32 width,
-    i32 height,
-    i32 channel_count,
-    const u8* pixels,
-    b8 has_transparency,
-    struct texture* out_texture) {
-    state_ptr->backend.create_texture(name, width, height, channel_count, pixels, has_transparency, out_texture);
+void renderer_create_texture(const u8* pixels, struct texture* texture) {
+    state_ptr->backend.create_texture(pixels, texture);
 }
 
 // just pass through - destroy texture
 void renderer_destroy_texture(struct texture* texture) {
     state_ptr->backend.destroy_texture(texture);
+}
+
+b8 renderer_create_material(struct material* material) {
+    return state_ptr->backend.create_material(material);
+}
+
+void renderer_destroy_material(struct material* material) {
+    state_ptr->backend.destroy_material(material);
 }

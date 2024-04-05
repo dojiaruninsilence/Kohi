@@ -8,8 +8,13 @@
 #include <sys/stat.h>
 
 b8 filesystem_exists(const char* path) {
-    struct stat buffer; // it does not like this
+#ifdef _MSC_VER
+    struct _stat buffer;
+    return _stat(path, &buffer);
+#else
+    struct stat buffer;
     return stat(path, &buffer) == 0;
+#endif
 }
 
 b8 filesystem_open(const char* path, file_modes mode, b8 binary, file_handle* out_handle) {
@@ -50,16 +55,13 @@ void filesystem_close(file_handle* handle) {
     }
 }
 
-b8 filesystem_read_line(file_handle* handle, char** line_buf) {
-    if (handle->handle) {  // if there is handle on the handle
-        // since we are reading a single line, it should be safe to assume this is enough characters
-        char buffer[32000];  // define an array of characters 32000 long called buffer
-        // call the c function fgets, pass it the buffer, 3200 for max count, and a file pointer to the handle
-        if (fgets(buffer, 3200, (FILE*)handle->handle) != 0) {                      // if it actually returns something
-            u64 length = strlen(buffer);                                            // get the length of the buffer array and store in length
-            *line_buf = kallocate((sizeof(char) * length) + 1, MEMORY_TAG_STRING);  // allocate some memory the size of a char times length, plus one, give it the string tag, and hold the pointer in *line buf(de referenced)
-            strcpy(*line_buf, buffer);                                              // copy the buffer into the newly allocated memory
-            return true;                                                            // was a success
+// i am  a little lost on this one - need to look up
+b8 filesystem_read_line(file_handle* handle, u64 max_length, char** line_buf, u64* out_line_length) {
+    if (handle->handle && line_buf && out_line_length && max_length > 0) {  // if there is handle on the handle, line buff and out line length have been entered, and the max length is greater than 0
+        char* buf = *line_buf;                                              // get a character array, by dereferencing line buf
+        if (fgets(buf, max_length, (FILE*)handle->handle) != 0) {
+            *out_line_length = strlen(*line_buf);
+            return true;
         }
     }
     // if there isnt a handle
