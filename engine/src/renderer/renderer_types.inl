@@ -33,7 +33,7 @@ typedef struct material_uniform_object {
 // where the data for geometry to be rendered is stored - and a way to pass the geometry to the renderer
 typedef struct geometry_render_data {
     mat4 model;          // model matrix for a batch of geometry
-    material* material;  // hold a pointer to a material
+    geometry* geometry;  // hold a pointer to a material
 } geometry_render_data;
 
 // one of the places object oriented programing makes sense
@@ -60,7 +60,7 @@ typedef struct renderer_backend {
     b8 (*end_frame)(struct renderer_backend* backend, f32 delta_time);  // boolean, make sure frame ends succeffully. takes in delta time as well as the backend
 
     // update an object using push constants - just pass in a model to upload
-    void (*update_object)(geometry_render_data data);
+    void (*draw_geometry)(geometry_render_data data);  // changed the name of this you have to make sure that everything down form it is changed as well
 
     // textures
 
@@ -75,8 +75,15 @@ typedef struct renderer_backend {
     b8 (*create_material)(struct material* material);
     void (*destroy_material)(struct material* material);
 
+    // geometry
+    b8 (*create_geometry)(geometry* geometry, u32 vertex_count, const vertex_3d* vertices, u32 index_count, const u32* indices);
+    void (*destroy_geometry)(geometry* geometry);
+
 } renderer_backend;
 
 typedef struct render_packet {
     f32 delta_time;
+
+    u32 geometry_count;                // number of geometries in the array
+    geometry_render_data* geometries;  // a pointer to an array of geometries
 } render_packet;

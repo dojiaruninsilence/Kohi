@@ -41,3 +41,15 @@ typedef struct material {
     vec4 diffuse_colour;
     texture_map diffuse_map;  // store array of textures and their uses
 } material;
+
+#define GEOMETRY_NAME_MAX_LENGTH 256
+
+// @brief represents actual geometry in the world
+// typically (but not always, depending on use) paired with a material
+typedef struct geometry {
+    u32 id;           // unique id
+    u32 internal_id;  // renderer specific id
+    u32 generation;   // track any time it is updated
+    char name[GEOMETRY_NAME_MAX_LENGTH];
+    material* material;
+} geometry;

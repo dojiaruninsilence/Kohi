@@ -24,7 +24,7 @@ void vulkan_renderer_update_global_state(mat4 projection, mat4 view, vec3 view_p
 b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time);
 
 // update an object using push constants, input a model to upload
-void vulkan_backend_update_object(geometry_render_data data);
+void vulkan_renderer_draw_geometry(geometry_render_data data);
 
 // create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
 // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
@@ -38,3 +38,9 @@ b8 vulkan_renderer_create_material(struct material* material);
 
 // destroy a material
 void vulkan_renderer_destroy_material(struct material* material);
+
+// create geometry
+b8 vulkan_renderer_create_geometry(geometry* geometry, u32 vertex_count, const vertex_3d* vertices, u32 index_count, const u32* indices);
+
+// destroy geometry
+void vulkan_renderer_destroy_geometry(geometry* geometry);

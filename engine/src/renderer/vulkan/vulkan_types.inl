@@ -164,8 +164,25 @@ typedef struct vulkan_material_shader_instance_state {  // this struct is one pe
     vulkan_descriptor_state descriptor_states[VULKAN_MATERIAL_SHADER_DESCRIPTOR_COUNT];
 } vulkan_material_shader_instance_state;
 
-// max number of objects - this is a temporary thing
+// max number of material instances
+// TODO: make configurable
 #define VULKAN_MAX_MATERIAL_COUNT 1024
+
+// max number of simultaneos uploaded geometries
+// TODO: make configurable
+#define VULKAN_MAX_GEOMETRY_COUNT 4096
+
+// @brief Internal Buffer data for geometry
+typedef struct vulkan_geometry_data {
+    u32 id;                    // matches the internal id in the geometry structure
+    u32 generation;            // keep track here too
+    u32 vertex_count;          // total number of vertices in the geometry
+    u32 vertex_size;           // size of each vertex times the count, size in bytes
+    u32 vertex_buffer_offset;  // how far into the geometry buffer from the beginning
+    u32 index_count;           // same but for indices
+    u32 index_size;
+    u32 index_buffer_offset;
+} vulkan_geometry_data;
 
 typedef struct vulkan_material_shader {
     // vertex, fragment, ect
@@ -264,6 +281,9 @@ typedef struct vulkan_context {
 
     u64 geometry_vertex_offset;  // offset to keep track of everytime that we load data into the buffer
     u64 geometry_index_offset;   // offset to keep track of everytime that we load data into the buffer
+
+    // TODO: make dynamic
+    vulkan_geometry_data geometries[VULKAN_MAX_GEOMETRY_COUNT];
 
     i32 (*find_memory_index)(u32 type_filter, u32 property_flags);  // a fuction pointer that takes in a type filter and the property flags - returns a 32 bit int
 

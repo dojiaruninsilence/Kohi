@@ -23,5 +23,10 @@ void renderer_create_texture(const u8* pixels, struct texture* texture);
 // destroy a texture
 void renderer_destroy_texture(struct texture* texture);
 
+// materials
 b8 renderer_create_material(struct material* material);
 void renderer_destroy_material(struct material* material);
+
+// geometry
+b8 renderer_create_geometry(geometry* geometry, u32 vertex_count, const vertex_3d* vertices, u32 index_count, const u32* indices);
+void renderer_destroy_geometry(geometry* geometry);

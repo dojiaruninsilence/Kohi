@@ -9,6 +9,7 @@
 #include "core/event.h"
 #include "core/input.h"
 #include "core/clock.h"
+#include "core/kstring.h"
 
 #include "memory/linear_allocator.h"
 
@@ -17,6 +18,11 @@
 // systems
 #include "systems/texture_system.h"
 #include "systems/material_system.h"
+#include "systems/geometry_system.h"
+
+// TODO: temp
+#include "math/kmath.h"
+// TODO: temp
 
 // there will only be one instance of application running
 
@@ -24,7 +30,6 @@ typedef struct application_state {
     game* game_inst;
     b8 is_running;
     b8 is_suspended;
-    // platform_state platform;  // pointer to platform state - dynamic allocation? need to look all these up ------------------------ remove if working----------------------------
     i16 width;
     i16 height;
     clock clock;
@@ -65,6 +70,14 @@ typedef struct application_state {
     u64 material_system_memory_requirement;  // where the amount of storage that is needed fot the material system is stored
     void* material_system_state;             // a pointer to where the material system state is being stored
 
+    // geometry system state allocation
+    u64 geometry_system_memory_requirement;  // where the amount of storage that is needed fot the geometry system is stored
+    void* geometry_system_state;             // a pointer to where the geometry system state is being stored
+
+    // TODO: temp
+    geometry* test_geometry;
+    // TODO: temp
+
 } application_state;
 
 static application_state* app_state;  // define a pointer to the application state -- all we are storing on the stack for now is a pointer to the allocation
@@ -74,6 +87,36 @@ static application_state* app_state;  // define a pointer to the application sta
 b8 application_on_event(u16 code, void* sender, void* listener_inst, event_context context);    // genaric -- pass in the code, a pointer to the sender, a pointer to the instance, and the context
 b8 application_on_key(u16 code, void* sender, void* listener_inst, event_context context);      // on key -- pass in the code, a pointer to the sender, a pointer to the instance, and the context
 b8 application_on_resized(u16 code, void* sender, void* listener_inst, event_context context);  // on resized event, pass in the code, a pointer to the sender, a pointer to the instance, and the context
+
+// TODO: temporary
+b8 event_on_debug_event(u16 code, void* sender, void* listener_inst, event_context data) {
+    const char* names[3] = {
+        "cobblestone",
+        "paving",
+        "paving2"};
+    static i8 choice = 2;
+
+    // save off the old name
+    const char* old_name = names[choice];
+
+    choice++;     // increment
+    choice %= 3;  // then mod back to 0. still need to learn this
+
+    // load up the new texture
+    if (app_state->test_geometry) {
+        app_state->test_geometry->material->diffuse_map.texture = texture_system_aquire(names[choice], true);
+        if (!app_state->test_geometry->material->diffuse_map.texture) {
+            KWARN("event_on_debug_event no texture! using default");
+            app_state->test_geometry->material->diffuse_map.texture = texture_system_get_default_texture();
+        }
+
+        // release the old texture
+        texture_system_release(old_name);
+    }
+
+    return true;
+}
+// TODO: end temporary
 
 // create a game, this will include evey external thing, like testbed or an editor
 b8 application_create(game* game_inst) {
@@ -121,14 +164,6 @@ b8 application_create(game* game_inst) {
         return false;                                                                                          // and boot out
     }
 
-    // input_initialize();  // initialize the input subsystem --------------------------------- remove if working -----------------------------------------------
-
-    // // initialize events and verify it worked
-    // if (!event_initialize()) {
-    //     KERROR("Event System failed initialization. Application cannot continue");
-    //     return false;
-    // } --------------------------------- remove if working -----------------------------------------------
-
     // initialize the input system
     // first pass pass in the the pointer to the requirement field to get the size required
     input_system_initialize(&app_state->input_system_memory_requirement, 0);
@@ -142,6 +177,9 @@ b8 application_create(game* game_inst) {
     event_register(EVENT_CODE_KEY_PRESSED, 0, application_on_key);
     event_register(EVENT_CODE_KEY_RELEASED, 0, application_on_key);
     event_register(EVENT_CODE_RESIZED, 0, application_on_resized);
+    // TODO: temp
+    event_register(EVENT_CODE_DEBUG0, 0, event_on_debug_event);
+    // TODO: temp
 
     // initialize the platform subsystem and layer
     // on the first pass just pass in the pointer to the platform memory requirement field, leave the rest 0s
@@ -195,6 +233,32 @@ b8 application_create(game* game_inst) {
         KFATAL("Failed to initialize material system. Application cannot continue");                                                           // throw a fatal error
         return false;                                                                                                                          // and boot out
     }
+
+    // geometry system
+    geometry_system_config geometry_sys_config;     // define the geometry system configuration struct
+    geometry_sys_config.max_geometry_count = 4096;  // max number of geometry that can be loaded
+    // on the first pass just pass in the pointer to the geometry system memory requirement field, and the configuration struct, leave the rest 0
+    geometry_system_initialize(&app_state->geometry_system_memory_requirement, 0, geometry_sys_config);
+    // allocate memory from the linear allocator for the state of geometry system, and give the pointer to the memory to geometry system state
+    app_state->geometry_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->geometry_system_memory_requirement);
+    // second pass actually initializes the geometry system, pass it a pointer to the required memory, and a pointer to where the memory is, and a pointer to the application name
+    if (!geometry_system_initialize(&app_state->geometry_system_memory_requirement, app_state->geometry_system_state, geometry_sys_config)) {  // if it fails
+        KFATAL("Failed to initialize geometry system. Application cannot continue");                                                           // throw a fatal error
+        return false;                                                                                                                          // and boot out
+    }
+
+    // TODO: temp
+    // load up a plane configuration, and load geometry from it.
+    geometry_config g_config = geometry_system_generate_plane_config(10.0f, 5.0f, 5, 5, 5.0f, 2.0f, "test geometry", "test_material");
+    app_state->test_geometry = geometry_system_acquire_from_config(g_config, true);
+
+    // clean up the allocations for the geometry config
+    kfree(g_config.vertices, sizeof(vertex_3d) * g_config.vertex_count, MEMORY_TAG_ARRAY);
+    kfree(g_config.indices, sizeof(u32) * g_config.index_count, MEMORY_TAG_ARRAY);
+
+    // load up default geometry
+    // app_state->test_geometry = geometry_system_get_default();
+    // TODO: end temp
 
     // initialize the game
     if (!app_state->game_inst->initialize(app_state->game_inst)) {
@@ -251,6 +315,16 @@ b8 application_run() {
             // TODO: refactor packet creation
             render_packet packet;
             packet.delta_time = delta;
+
+            // TODO: temp
+            geometry_render_data test_render;
+            test_render.geometry = app_state->test_geometry;
+            test_render.model = mat4_identity();
+
+            packet.geometry_count = 1;
+            packet.geometries = &test_render;
+            // TODO: end temp
+
             renderer_draw_frame(&packet);  // here is where the draw calls are going to be?
 
             // figure out how long the frame took and, if below
@@ -287,9 +361,15 @@ b8 application_run() {
     event_unregister(EVENT_CODE_KEY_PRESSED, 0, application_on_key);
     event_unregister(EVENT_CODE_KEY_RELEASED, 0, application_on_key);
     event_unregister(EVENT_CODE_RESIZED, 0, application_on_resized);
+    // TODO: temp
+    event_unregister(EVENT_CODE_DEBUG0, 0, event_on_debug_event);
+    // TODO: end temp
 
     // shutdown the input system  -  pass it the pointer to where the state is being stored
     input_system_shutdown(app_state->input_system_state);
+
+    // shutdown the geometry system - pass it a pointer to where the state is being stored
+    geometry_system_shutdown(app_state->geometry_system_state);
 
     // shutdown the material system - pass it a pointer to where the state is being stored
     material_system_shutdown(app_state->material_system_state);

@@ -15,8 +15,11 @@ void vulkan_material_shader_use(vulkan_context* context, struct vulkan_material_
 // update the object shaders global state, , pass in a pointer to the context, and a pointer to where the shader struct is held
 void vulkan_material_shader_update_global_state(vulkan_context* context, struct vulkan_material_shader* shader, f32 delta_time);
 
-// this is only temporary, this will be moving
-void vulkan_material_shader_update_object(vulkan_context* context, struct vulkan_material_shader* shader, geometry_render_data data);
+// set the model
+void vulkan_material_shader_set_model(vulkan_context* context, struct vulkan_material_shader* shader, mat4 model);
+
+// apply a material to geometry - does what the update object function had been doing
+void vulkan_material_shader_apply_material(vulkan_context* context, struct vulkan_material_shader* shader, material* material);
 
 // pull in resources from outside the engine like meshes, and textures and such, and tag it with an id, to keep track of them without having to keep pointers
 b8 vulkan_material_shader_acquire_resources(vulkan_context* context, struct vulkan_material_shader* shader, material* material);

@@ -67,6 +67,17 @@ KAPI i32 string_format_v(char* dest, const char* format, void* va_listp) {
     return -1;  // if there is no destinstion, return -1
 }
 
+// @brief Empties the provided string by setting the first character to 0
+// @param str the string to be emptied
+// @return a pointer to str
+char* string_empty(char* str) {
+    if (str) {
+        str[0] = 0;
+    }
+
+    return str;
+}
+
 // copies a string from the source to the destination and returns a pointer to the destination - just using the standard library functions for now
 KAPI char* string_copy(char* dest, const char* source) {
     return strcpy(dest, source);

@@ -26,6 +26,11 @@ KAPI i32 string_format(char* dest, const char* format, ...);
 // @ returns the size of the data written
 KAPI i32 string_format_v(char* dest, const char* format, void* va_list);
 
+// @brief Empties the provided string by setting the first character to 0
+// @param str the string to be emptied
+// @return a pointer to str
+KAPI char* string_empty(char* str);
+
 // copies a string from the source to the destination and returns a pointer to the destination
 KAPI char* string_copy(char* dest, const char* source);
 
