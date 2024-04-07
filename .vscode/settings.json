@@ -64,6 +64,8 @@
         "defines.h": "c",
         "vulkan_types.inl": "c",
         "clock.h": "c",
-        "kstring.h": "c"
+        "kstring.h": "c",
+        "logger.h": "c",
+        "stb_image.h": "c"
     }
 }
