@@ -55,6 +55,16 @@ void filesystem_close(file_handle* handle) {
     }
 }
 
+KAPI b8 filesystem_size(file_handle* handle, u64* out_size) {
+    if (handle->handle) {                           // verify proper data was passed in
+        fseek((FILE*)handle->handle, 0, SEEK_END);  // seek to the end of the file
+        *out_size = ftell((FILE*)handle->handle);   // how far in the pointer is
+        rewind((FILE*)handle->handle);              // set the pointer in the file to the beginning
+        return true;
+    }
+    return false;
+}
+
 // i am  a little lost on this one - need to look up
 b8 filesystem_read_line(file_handle* handle, u64 max_length, char** line_buf, u64* out_line_length) {
     if (handle->handle && line_buf && out_line_length && max_length > 0) {  // if there is handle on the handle, line buff and out line length have been entered, and the max length is greater than 0
@@ -98,23 +108,35 @@ b8 filesystem_read(file_handle* handle, u64 data_size, void* out_data, u64* out_
     return false;
 }
 
-b8 filesystem_read_all_bytes(file_handle* handle, u8** out_bytes, u64* out_bytes_read) {
-    if (handle->handle) {  // if there is handle on the handle
-        // file size
-        fseek((FILE*)handle->handle, 0, SEEK_END);  // use c func to seek to the end of the file
-        u64 size = ftell((FILE*)handle->handle);    // at the end of the file, use the ftell c func to tell how long the file is
-        rewind((FILE*)handle->handle);              // use the c func rewind to go back to the beginning of the file
-
-        *out_bytes = kallocate(sizeof(u8) * size, MEMORY_TAG_STRING);  // allocate some memory the size of a u8 times the size of the file
-        // dereference out bytes read, and store the size from calling c func fread
-        *out_bytes_read = fread(*out_bytes, 1, size, (FILE*)handle->handle);  // pass it the place to hold the data, only 1 file, the size of the file, and a file pointer to the handle
-        if (*out_bytes_read != size) {                                        // if the out bytes read is not the same as the filesize
-            return false;                                                     // boot outt failed
+b8 filesystem_read_all_bytes(file_handle* handle, u8* out_bytes, u64* out_bytes_read) {
+    if (handle->handle && out_bytes && out_bytes_read) {  // verify proper data is input
+        // file size -- boot out if it fails
+        u64 size = 0;
+        if (!filesystem_size(handle, &size)) {
+            return false;
         }
-        // if success
-        return true;
+
+        // dereference out bytes read, and store the size from calling c func fread
+        *out_bytes_read = fread(out_bytes, 1, size, (FILE*)handle->handle);  // pass it the place to hold the data, only 1 file, the size of the file, and a file pointer to the handle
+        return *out_bytes_read == size;
     }
-    // if there wasnt a handle to a file handle
+    // if there wasnt all valid data input
+    return false;
+}
+
+b8 filesystem_read_all_text(file_handle* handle, char* out_text, u64* out_bytes_read) {
+    if (handle->handle && out_text && out_bytes_read) {  // verify proper data is input
+        // file size -- boot out if it fails
+        u64 size = 0;
+        if (!filesystem_size(handle, &size)) {
+            return false;
+        }
+
+        // dereference out bytes read, and store the size from calling c func fread
+        *out_bytes_read = fread(out_text, 1, size, (FILE*)handle->handle);  // pass it the place to hold the data, only 1 file, the size of the file, and a file pointer to the handle
+        return *out_bytes_read == size;
+    }
+    // if there wasnt all valid data input
     return false;
 }
 

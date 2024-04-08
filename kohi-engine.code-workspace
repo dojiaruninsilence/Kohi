@@ -55,7 +55,13 @@
 			"iosfwd": "c",
 			"xlocbuf": "c",
 			"vulkan_shader_utils.h": "c",
-			"sstream": "c"
+			"sstream": "c",
+			"hashtable.h": "c",
+			"array": "c",
+			"span": "c",
+			"vector": "c",
+			"xstring": "c",
+			"xutility": "c"
 		}
 	}
 }

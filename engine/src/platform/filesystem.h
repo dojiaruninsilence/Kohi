@@ -32,6 +32,12 @@ KAPI b8 filesystem_open(const char* path, file_modes mode, b8 binary, file_handl
 // @param handle a pointer to a file handle structure which holds the handle to be closed
 KAPI void filesystem_close(file_handle* handle);
 
+// @brief attempts to read the size of the file to which handle is attached
+// @param handle the file handle
+// @param out_size a pointer fo hold the file size
+// @return KAPI
+KAPI b8 filesystem_size(file_handle* handle, u64* out_size);
+
 // reads up to a newline or EOF.
 // @param handle a pointer to a file_handle structure
 // @param max_length the maximum length to be read from the line
@@ -55,13 +61,19 @@ KAPI b8 filesystem_write_line(file_handle* handle, const char* text);
 // @ returns true if successful, otherwise false
 KAPI b8 filesystem_read(file_handle* handle, u64 data_size, void* out_data, u64* out_bytes_read);
 
-// reads up to data_size bytes of data into out_bytes_read.
-// allocates *out_bytes, which must be freed by the caller
+// reads all bytes of data into out_bytes
 // @param handle a pointer to a file_handle structure
-// @param out_bytes a pointer to a byte array which will be allocated and populated by this method
+// @param out_bytes a byte array which will be populated by this method
 // @param out_bytes_read a pointer to a number which will be populated with the number of bytes actually read from the file
 // @returns true if successful, otherwise false
-KAPI b8 filesystem_read_all_bytes(file_handle* handle, u8** out_bytes, u64* out_bytes_read);
+KAPI b8 filesystem_read_all_bytes(file_handle* handle, u8* out_bytes, u64* out_bytes_read);
+
+// reads all characters of data into out_bytes
+// @param handle a pointer to a file_handle structure
+// @param out_bytes a character array which will be populated by this method
+// @param out_bytes_read a pointer to a number which will be populated with the number of bytes actually read from the file
+// @returns true if successful, otherwise false
+KAPI b8 filesystem_read_all_text(file_handle* handle, char* out_text, u64* out_bytes_read);
 
 // writes provided data to the file
 // @param handle a pointer to a file_handle struct

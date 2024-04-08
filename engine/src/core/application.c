@@ -19,6 +19,7 @@
 #include "systems/texture_system.h"
 #include "systems/material_system.h"
 #include "systems/geometry_system.h"
+#include "systems/resource_system.h"
 
 // TODO: temp
 #include "math/kmath.h"
@@ -57,6 +58,10 @@ typedef struct application_state {
     // platform system state allocation
     u64 platform_system_memory_requirement;  // where the amount of storage that is needed for the platform system is stored
     void* platform_system_state;             // a pointer to where the platform state is being store
+
+    // resource system state allocation
+    u64 resource_system_memory_requirement;  // where the amount of storage that is needed for the resource system is stored
+    void* resource_system_state;             // a pointer to where the resource state is being store
 
     // renderer system state allocation
     u64 renderer_system_memory_requirement;  // where the amount of storage that is needed for the renderer system is stored
@@ -194,6 +199,18 @@ b8 application_create(game* game_inst) {
             game_inst->app_config.start_pos_y,               // the y pos
             game_inst->app_config.start_width,               // width
             game_inst->app_config.start_height)) {           // and height
+        return false;
+    }
+
+    // resource system. on the first call only the memory requirements will be returned, memory is then allocated for the resource system
+    // on the second call the system is actually initialized
+    resource_system_config resource_sys_config;
+    resource_sys_config.asset_base_path = "../assets";
+    resource_sys_config.max_loader_count = 32;
+    resource_system_initialize(&app_state->resource_system_memory_requirement, 0, resource_sys_config);
+    app_state->resource_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->resource_system_memory_requirement);
+    if (!resource_system_initialize(&app_state->resource_system_memory_requirement, app_state->resource_system_state, resource_sys_config)) {
+        KFATAL("Failed to initialize resource system. Aborting application.");
         return false;
     }
 
@@ -379,6 +396,9 @@ b8 application_run() {
 
     // shutdown the renderer  -  pass it the pointer to where the state is being stored
     renderer_system_shutdown(app_state->renderer_system_state);
+
+    // shut down the resource system
+    resource_system_shutdown(app_state->resource_system_state);
 
     // shut down the platform layer -  pass it the pointer to where the state is being stored
     platform_system_shutdown(app_state->platform_system_state);

@@ -7,9 +7,7 @@
 #include "renderer/renderer_frontend.h"
 #include "systems/texture_system.h"
 
-// TODO: temp: resource system
-#include "platform/filesystem.h"
-// end temp
+#include "systems/resource_system.h"
 
 // store the material system state here
 typedef struct material_system_state {
@@ -37,7 +35,6 @@ static material_system_state* state_ptr = 0;  // get a pointer to the system sta
 b8 create_default_material(material_system_state* state);
 b8 load_material(material_config config, material* m);
 void destroy_material(material* m);
-b8 load_configuration_file(const char* path, material_config* out_config);
 
 // initialize the material system -- this is a 2 step function, call the first time without the pointer to the block of memory
 // it will return the amount of memory the system will require to run, memory must then be allocated,
@@ -119,23 +116,27 @@ void material_system_shutdown(void* state) {
 
 // acquire a material by name from file - assumes that there is a material with that name
 material* material_system_acquire(const char* name) {
-    // load the given material configuration from disk
-    material_config config;
-
-    // load file from disk
-    // TODO: should be able to ve located anywhere
-    char* format_str = "assets/materials/%s.%s";
-    char full_file_path[512];  // output buffer
-
-    // TODO: try different extensions
-    string_format(full_file_path, format_str, name, "kmt");
-    if (!load_configuration_file(full_file_path, &config)) {
-        KERROR("Failed to load material file: '%s'. Null pointer will be returned.", full_file_path);
+    // load the given material configuration from resource
+    resource material_resource;
+    if (!resource_system_load(name, RESOURCE_TYPE_MATERIAL, &material_resource)) {
+        KERROR("Failed to load material resource, returning nullptr.");
         return 0;
     }
 
     // now acquire from loaded config
-    return material_system_acquire_from_config(config);
+    material* m;
+    if (material_resource.data) {
+        m = material_system_acquire_from_config(*(material_config*)material_resource.data);
+    }
+
+    // clean up
+    resource_system_unload(&material_resource);
+
+    if (!m) {
+        KERROR("Failed to load material resource, returning nullptr.");
+    }
+
+    return m;
 }
 
 // acquire a material system from a config - from code instead of a file
@@ -306,78 +307,6 @@ b8 create_default_material(material_system_state* state) {
         KFATAL("Failed to aquire renderer resources for default texture. Application cannot continue.");
         return false;
     }
-
-    return true;
-}
-
-b8 load_configuration_file(const char* path, material_config* out_config) {
-    file_handle f;
-    if (!filesystem_open(path, FILE_MODE_READ, false, &f)) {
-        KERROR("load_configuration_file - unable to open material file for reading: '%s'.", path);
-        return false;
-    }
-
-    // read each line of the file
-    char line_buf[512] = "";                                   // an empty char array 512 chars long
-    char* p = &line_buf[0];                                    // get a pointer to the first char in the array
-    u64 line_length = 0;                                       // the default, for reporting purposes
-    u32 line_number = 1;                                       // the default, for reporting purposes
-    while (filesystem_read_line(&f, 511, &p, &line_length)) {  // as long as there are valid lines to read, pass in 511 for the max length, so we dont go over the buffer
-        // trim the string
-        char* trimmed = string_trim(line_buf);
-
-        // get the trimmed length
-        line_length = string_length(trimmed);
-
-        // skip blank lines and comments.
-        if (line_length < 1 || trimmed[0] == '#') {  // if there is nothing left after trimming blank spaces, or the first char is #(indicates a commented line)
-            line_number++;                           // increment the line number
-            continue;                                // start the loop over?
-        }
-
-        // split into variables and values
-        i32 equal_index = string_index_of(trimmed, '=');  // find the index number of the '=' char
-        if (equal_index == -1) {                          // if no '=' was found
-            KWARN("Potential formatting issue found in file '%s': '=' token not found. Skipping line %ui.", path, line_number);
-            line_number++;  // increment the line number
-            continue;       // start the loop over?
-        }
-
-        // assume a max of 64 characters for the variable name
-        char raw_var_name[64];
-        kzero_memory(raw_var_name, sizeof(char) * 64);       // just to be safe
-        string_mid(raw_var_name, trimmed, 0, equal_index);   // copy a substring from index 0 to equal index
-        char* trimmed_var_name = string_trim(raw_var_name);  // trim any space from the raw var, and save in trimmed var
-
-        // assume a max of 511-65 (446) for the max length of the value to account for the variable name and the '='
-        char raw_value[446];
-        kzero_memory(raw_value, sizeof(char) * 446);          // just to be safe
-        string_mid(raw_value, trimmed, equal_index + 1, -1);  // copy a substring from the equal index plus one all the way to the end of the line
-        char* trimmed_value = string_trim(raw_value);         // trim the spaces off the ends of the string, and save under trimmed value
-
-        // process the variable
-        if (strings_equali(trimmed_var_name, "version")) {
-            // TODO: version
-        } else if (strings_equali(trimmed_var_name, "name")) {
-            string_ncopy(out_config->name, trimmed_value, MATERIAL_NAME_MAX_LENGTH);
-        } else if (strings_equali(trimmed_var_name, "diffuse_map_name")) {
-            string_ncopy(out_config->diffuse_map_name, trimmed_value, TEXTURE_NAME_MAX_LENGTH);
-        } else if (strings_equali(trimmed_var_name, "diffuse_colour")) {
-            // parse the color
-            if (!string_to_vec4(trimmed_value, &out_config->diffuse_colour)) {
-                KWARN("Error parsing diffuse_colour in file '%s'. Using default of white instead.", path);
-                out_config->diffuse_colour = vec4_one();  // white
-            }
-        }
-
-        // TODO: more fields will be going here
-
-        // clear the line buffer
-        kzero_memory(line_buf, sizeof(char) * 512);
-        line_number++;
-    }
-
-    filesystem_close(&f);
 
     return true;
 }
