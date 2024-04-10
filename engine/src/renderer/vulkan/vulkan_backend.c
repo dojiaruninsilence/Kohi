@@ -127,8 +127,10 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     KINFO("Validation layers enabled. Enumerating...");
 
     // the list of validation layers required
-    required_validation_layer_names = darray_create(const char*);                      // create the array and allocate memory for it
-    darray_push(required_validation_layer_names, &"VK_LAYER_KHRONOS_validation");      // push in the khronos validation layer into the array
+    required_validation_layer_names = darray_create(const char*);                  // create the array and allocate memory for it
+    darray_push(required_validation_layer_names, &"VK_LAYER_KHRONOS_validation");  // push in the khronos validation layer into the array
+    // NOTE: enable this when needed for debugging
+    // darray_push(required_validation_layer_names, &"VK_LAYER_LUNARG_api_dump");
     required_validation_layer_count = darray_length(required_validation_layer_names);  // layer count set to the number of elements in the array
 
     // obtain a list of available validation layers
@@ -433,6 +435,7 @@ b8 vulkan_renderer_backend_begin_frame(renderer_backend* backend, f32 delta_time
             context.image_available_semaphores[context.current_frame],  // the image available semaphore that is attached to the current frame - and should be signaled when this completes use current frame to sync them up
             0,                                                          // no time out
             &context.image_index)) {                                    // and the index of the image being aquired
+        KERROR("Failed to acquire next image index, booting.");
         return false;
     }
 

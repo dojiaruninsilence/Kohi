@@ -92,8 +92,9 @@ void vulkan_swapchain_present(
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {  // if result is out of date, or is suboptimal
         // swapchain is out of date, suboptimal, or a framebuffer resize has occured. trigger swapchain recreation
         vulkan_swapchain_recreate(context, context->framebuffer_width, context->framebuffer_height, swapchain);  // call vulkan swapchain recreate function, pass in the context, the widt and height of the framebuff, and the swapchain struct
-    } else if (result != VK_SUCCESS) {                                                                           // if it isnt successful
-        KFATAL("Failed to present swap chain image!");                                                           // throw fatal error
+        KDEBUG("Swapchain recreated because swapchain returned out of date or suboptimal.");
+    } else if (result != VK_SUCCESS) {                  // if it isnt successful
+        KFATAL("Failed to present swap chain image!");  // throw fatal error
     }
 
     // increment and loop the index

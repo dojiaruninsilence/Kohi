@@ -331,6 +331,20 @@ b8 select_physical_device(vulkan_context* context) {
         VkPhysicalDeviceMemoryProperties memory;
         vkGetPhysicalDeviceMemoryProperties(physical_devices[i], &memory);
 
+        KINFO("Evaluating device: '%s', index %u.", properties.deviceName, i);
+
+        // check if device supports local/host visible combo
+        b8 supports_device_local_host_visible = false;
+        for (u32 i = 0; i < memory.memoryTypeCount; ++i) {
+            // check each memory type to see if its bit is set to 1
+            if (
+                ((memory.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0) &&
+                ((memory.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != 0)) {
+                supports_device_local_host_visible = true;
+                break;
+            }
+        }
+
         // TODO: these requirement should probably be driven by the engine
         // configuration -- if a device doesnt have all of these, it will move on to the next device
         vulkan_physical_device_requirements requirements = {};  // start with everything zeroed out
@@ -419,6 +433,7 @@ b8 select_physical_device(vulkan_context* context) {
             context->device.properties = properties;  // get the properties of the physical device
             context->device.features = features;      // get the features of the physical device
             context->device.memory = memory;          // get the memory of the physical device
+            context->device.supports_device_local_host_visible = supports_device_local_host_visible;
             break;
         }
     }
