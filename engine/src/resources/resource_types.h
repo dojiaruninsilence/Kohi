@@ -61,23 +61,31 @@ typedef struct texture_map {
 // define the max length that a material may be named
 #define MATERIAL_NAME_MAX_LENGTH 256
 
+// an enum for defining what type of material it is like ui or world
+typedef enum material_type {
+    MATERIAL_TYPE_WORLD,
+    MATERIAL_TYPE_UI
+} material_type;
+
+// where we will hold the configuration settings for each of the materials
+typedef struct material_config {
+    char name[MATERIAL_NAME_MAX_LENGTH];
+    material_type type;  // type like ui or world
+    b8 auto_release;     // does it auto release
+    vec4 diffuse_colour;
+    char diffuse_map_name[TEXTURE_NAME_MAX_LENGTH];  // ultimately becomes the texture name, for loading and unloading purposes
+} material_config;
+
 // where we will store the data for the materials
 typedef struct material {
     u32 id;                               // the id of the material
     u32 generation;                       // update whenever the material changes
     u32 internal_id;                      // id handle to the internal material data
+    material_type type;                   // type like ui or world
     char name[MATERIAL_NAME_MAX_LENGTH];  // name of the material
     vec4 diffuse_colour;
     texture_map diffuse_map;  // store array of textures and their uses
 } material;
-
-// where we will hold the configuration settings for each of the materials
-typedef struct material_config {
-    char name[MATERIAL_NAME_MAX_LENGTH];
-    b8 auto_release;  // does it auto release
-    vec4 diffuse_colour;
-    char diffuse_map_name[TEXTURE_NAME_MAX_LENGTH];  // ultimately becomes the texture name, for loading and unloading purposes
-} material_config;
 
 #define GEOMETRY_NAME_MAX_LENGTH 256
 

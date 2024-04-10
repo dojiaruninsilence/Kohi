@@ -253,6 +253,9 @@ b8 load_material(material_config config, material* m) {
     // name
     string_ncopy(m->name, config.name, MATERIAL_NAME_MAX_LENGTH);
 
+    // type
+    m->type = config.type;
+
     // diffuse color
     m->diffuse_colour = config.diffuse_colour;
 
@@ -304,7 +307,7 @@ b8 create_default_material(material_system_state* state) {
     state->default_material.diffuse_map.texture = texture_system_get_default_texture();
 
     if (!renderer_create_material(&state->default_material)) {
-        KFATAL("Failed to aquire renderer resources for default texture. Application cannot continue.");
+        KFATAL("Failed to aquire renderer resources for default material. Application cannot continue.");
         return false;
     }
 

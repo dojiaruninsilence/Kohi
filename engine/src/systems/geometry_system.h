@@ -11,10 +11,12 @@ typedef struct geometry_system_config {
 
 // where we are going to store the configurations for the geometry - for each piece of geometry
 typedef struct geometry_config {
-    u32 vertex_count;     // number of vertices in the geometry
-    vertex_3d* vertices;  // pointer to the array of vertices for the geometry
-    u32 index_count;      // number of indices in the geometry
-    u32* indices;         // pointer to the array of indices for the geometry
+    u32 vertex_size;
+    u32 vertex_count;  // number of vertices in the geometry
+    void* vertices;    // pointer to the array of vertices for the geometry
+    u32 index_size;
+    u32 index_count;  // number of indices in the geometry
+    void* indices;    // pointer to the array of indices for the geometry
     char name[GEOMETRY_NAME_MAX_LENGTH];
     char material_name[MATERIAL_NAME_MAX_LENGTH];
 } geometry_config;
@@ -45,6 +47,10 @@ void geometry_system_release(geometry* geometry);
 // @brief obtains a pointer to the default geometry
 // @return a pointer to the default geometry
 geometry* geometry_system_get_default();
+
+// @brief obtains a pointer to the default geometry
+// @return a pointer to the default geometry
+geometry* geometry_system_get_default_2d();
 
 // @brief Generates configuration for plane geometries given the provided parameters.
 // NOTE: vertex and index arrays are dynamically allocated and should be freed upon object disposal.  Thus, this should not be considered production code

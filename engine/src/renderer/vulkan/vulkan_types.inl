@@ -167,10 +167,10 @@ typedef struct vulkan_geometry_data {
     u32 id;                    // matches the internal id in the geometry structure
     u32 generation;            // keep track here too
     u32 vertex_count;          // total number of vertices in the geometry
-    u32 vertex_size;           // size of each vertex times the count, size in bytes
+    u32 vertex_element_size;   // size of each vertex times the count, size in bytes
     u32 vertex_buffer_offset;  // how far into the geometry buffer from the beginning
     u32 index_count;           // same but for indices
-    u32 index_size;
+    u32 index_element_size;
     u32 index_buffer_offset;
 } vulkan_geometry_data;
 

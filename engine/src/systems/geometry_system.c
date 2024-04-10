@@ -18,6 +18,7 @@ typedef struct geometry_system_state {
     geometry_system_config config;  // store the configurations of the system
 
     geometry default_geometry;  // store a default geometry
+    geometry default_2d_geometry;
 
     // array of registered meshes
     geometry_reference* registered_geometries;
@@ -27,7 +28,7 @@ typedef struct geometry_system_state {
 static geometry_system_state* state_ptr = 0;
 
 // forward declarations for local functions
-b8 create_default_geometry(geometry_system_state* state);
+b8 create_default_geometries(geometry_system_state* state);
 b8 create_geometry(geometry_system_state* state, geometry_config config, geometry* g);
 void destroy_geometry(geometry_system_state* state, geometry* g);
 
@@ -40,7 +41,7 @@ b8 geometry_system_initialize(u64* memory_requirement, void* state, geometry_sys
 
     // Block of memory will contain state structure, then block for array, then block for hashtable if we decide that we need one
     u64 struct_requirement = sizeof(geometry_system_state);
-    u64 array_requirement = sizeof(geometry) * config.max_geometry_count;
+    u64 array_requirement = sizeof(geometry_reference) * config.max_geometry_count;
     *memory_requirement = struct_requirement + array_requirement;
 
     // if no state was passed in, just trying to get the memory requirements, boot out here
@@ -65,8 +66,8 @@ b8 geometry_system_initialize(u64* memory_requirement, void* state, geometry_sys
     }
 
     // create the default geometry - throw fatal if it fails
-    if (!create_default_geometry(state_ptr)) {
-        KFATAL("Failed to create the default geometry. Application cannot continue.");
+    if (!create_default_geometries(state_ptr)) {
+        KFATAL("Failed to create the default geometries. Application cannot continue.");
         return false;
     }
 
@@ -151,7 +152,7 @@ void geometry_system_release(geometry* geometry) {
         return;
     }
     // if invalid id was passed in
-    KWARN("geometry_system_acquire_by_id cannot release invalid geometry id. nothing was done.");
+    KWARN("geometry_system_release cannot release invalid geometry id. nothing was done.");
 }
 
 // @brief obtains a pointer to the default geometry
@@ -165,9 +166,18 @@ geometry* geometry_system_get_default() {
     return 0;
 }
 
+geometry* geometry_system_get_default_2d() {
+    if (state_ptr) {
+        return &state_ptr->default_2d_geometry;
+    }
+
+    KFATAL("geometry_system_get_default_2d called before the system was initialized. Returning nullptr.");
+    return 0;
+}
+
 b8 create_geometry(geometry_system_state* state, geometry_config config, geometry* g) {
     // send the geometry off to the renderer to be uploaded to the GPU
-    if (!renderer_create_geometry(g, config.vertex_count, config.vertices, config.index_count, config.indices)) {
+    if (!renderer_create_geometry(g, config.vertex_size, config.vertex_count, config.vertices, config.index_size, config.index_count, config.indices)) {
         // if geometry is failed to create invalidate the entry
         state->registered_geometries[g->id].reference_count = 0;
         state->registered_geometries[g->id].auto_release = false;
@@ -204,7 +214,7 @@ void destroy_geometry(geometry_system_state* state, geometry* g) {
     }
 }
 
-b8 create_default_geometry(geometry_system_state* state) {
+b8 create_default_geometries(geometry_system_state* state) {
     vertex_3d verts[4];
     kzero_memory(verts, sizeof(vertex_3d) * 4);
 
@@ -233,13 +243,49 @@ b8 create_default_geometry(geometry_system_state* state) {
     u32 indices[6] = {0, 1, 2, 0, 3, 1};
 
     // send the geomtery off to the renderer to be uploaded to the GPU
-    if (!renderer_create_geometry(&state->default_geometry, 4, verts, 6, indices)) {
+    if (!renderer_create_geometry(&state->default_geometry, sizeof(vertex_3d), 4, verts, sizeof(u32), 6, indices)) {
         KFATAL("Failed to create the default geometry. Application cannot continue.");
         return false;
     }
 
     // acquire the default material
     state->default_geometry.material = material_system_get_default();
+
+    vertex_2d verts2d[4];
+    kzero_memory(verts2d, sizeof(vertex_2d) * 4);
+
+    // creates a basic square plane
+    verts2d[0].position.x = -0.5 * f;  // 0    3
+    verts2d[0].position.y = -0.5 * f;  //
+    verts2d[0].texcoord.x = 0.0;       //
+    verts2d[0].texcoord.y = 0.0;       // 2    1
+
+    verts2d[1].position.x = 0.5 * f;
+    verts2d[1].position.y = 0.5 * f;
+    verts2d[1].texcoord.x = 1.0;
+    verts2d[1].texcoord.y = 1.0;
+
+    verts2d[2].position.x = -0.5 * f;
+    verts2d[2].position.y = 0.5 * f;
+    verts2d[2].texcoord.x = 0.0;
+    verts2d[2].texcoord.y = 1.0;
+
+    verts2d[3].position.x = 0.5 * f;
+    verts2d[3].position.y = -0.5 * f;
+    verts2d[3].texcoord.x = 1.0;
+    verts2d[3].texcoord.y = 0.0;
+
+    // indices (NOTE: counter-clockwise)
+    u32 indices2d[6] = {2, 1, 0, 3, 0, 1};
+
+    // send the geomtery off to the renderer to be uploaded to the GPU
+    if (!renderer_create_geometry(&state->default_2d_geometry, sizeof(vertex_2d), 4, verts2d, sizeof(u32), 6, indices2d)) {
+        KFATAL("Failed to create the default 2d geometry. Application cannot continue.");
+        return false;
+    }
+
+    // acquire the default material
+    state->default_2d_geometry.material = material_system_get_default();
 
     return true;
 }
@@ -287,10 +333,12 @@ geometry_config geometry_system_generate_plane_config(f32 width, f32 height, u32
     }
 
     geometry_config config;
+    config.vertex_size = sizeof(vertex_3d);
     config.vertex_count = x_segment_count * y_segment_count * 4;                             // 4 verts per segment
     config.vertices = kallocate(sizeof(vertex_3d) * config.vertex_count, MEMORY_TAG_ARRAY);  // allocate memory for the vertex array
-    config.index_count = x_segment_count * y_segment_count * 6;                              // 6 indices per segment
-    config.indices = kallocate(sizeof(u32) * config.index_count, MEMORY_TAG_ARRAY);          // allocate memory for the index array
+    config.index_size = sizeof(u32);
+    config.index_count = x_segment_count * y_segment_count * 6;                      // 6 indices per segment
+    config.indices = kallocate(sizeof(u32) * config.index_count, MEMORY_TAG_ARRAY);  // allocate memory for the index array
 
     // TODO: this generates extro vertices, but we can always deduplicate them later
     f32 seg_width = width / x_segment_count;    // divide the width by count to get the length of each segment
@@ -314,10 +362,10 @@ geometry_config geometry_system_generate_plane_config(f32 width, f32 height, u32
 
             // calculate the correct place in the array to put the vertex data
             u32 v_offset = ((y * x_segment_count) + x) * 4;
-            vertex_3d* v0 = &config.vertices[v_offset + 0];
-            vertex_3d* v1 = &config.vertices[v_offset + 1];
-            vertex_3d* v2 = &config.vertices[v_offset + 2];
-            vertex_3d* v3 = &config.vertices[v_offset + 3];
+            vertex_3d* v0 = &((vertex_3d*)config.vertices)[v_offset + 0];
+            vertex_3d* v1 = &((vertex_3d*)config.vertices)[v_offset + 1];
+            vertex_3d* v2 = &((vertex_3d*)config.vertices)[v_offset + 2];
+            vertex_3d* v3 = &((vertex_3d*)config.vertices)[v_offset + 3];
 
             // assign all the vertex points
             v0->position.x = min_x;
@@ -342,12 +390,12 @@ geometry_config geometry_system_generate_plane_config(f32 width, f32 height, u32
 
             // generate the indices
             u32 i_offset = ((y * x_segment_count) + x) * 6;
-            config.indices[i_offset + 0] = v_offset + 0;
-            config.indices[i_offset + 1] = v_offset + 1;
-            config.indices[i_offset + 2] = v_offset + 2;
-            config.indices[i_offset + 3] = v_offset + 0;
-            config.indices[i_offset + 4] = v_offset + 3;
-            config.indices[i_offset + 5] = v_offset + 1;
+            ((u32*)config.indices)[i_offset + 0] = v_offset + 0;
+            ((u32*)config.indices)[i_offset + 1] = v_offset + 1;
+            ((u32*)config.indices)[i_offset + 2] = v_offset + 2;
+            ((u32*)config.indices)[i_offset + 3] = v_offset + 0;
+            ((u32*)config.indices)[i_offset + 4] = v_offset + 3;
+            ((u32*)config.indices)[i_offset + 5] = v_offset + 1;
         }
     }
 
