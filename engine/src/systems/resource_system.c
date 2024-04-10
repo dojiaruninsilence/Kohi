@@ -161,7 +161,9 @@ const char* resource_system_base_path() {
 // internal function that does the work of actually loading the files
 b8 load(const char* name, resource_loader* loader, resource* out_resource) {
     if (!name || !loader || !loader->load || !out_resource) {  // verify that all of the proper data was passed in
-        out_resource->loader_id = INVALID_ID;
+        if (out_resource) {
+            out_resource->loader_id = INVALID_ID;
+        }
         return false;
     }
 
