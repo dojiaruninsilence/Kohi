@@ -6,8 +6,6 @@
 #include "vulkan_swapchain.h"
 #include "vulkan_renderpass.h"
 #include "vulkan_command_buffer.h"
-#include "vulkan_framebuffer.h"
-#include "vulkan_fence.h"
 #include "vulkan_utils.h"
 #include "vulkan_buffer.h"
 #include "vulkan_image.h"
@@ -25,6 +23,7 @@
 
 // shaders
 #include "shaders/vulkan_material_shader.h"
+#include "shaders/vulkan_ui_shader.h"
 
 #include "systems/material_system.h"
 
@@ -46,9 +45,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vk_debug_callback(
 i32 find_memory_index(u32 type_filter, u32 property_flags);
 b8 create_buffers(vulkan_context* context);  // private function declaration to create a data buffer
 
-void create_command_buffers(renderer_backend* backend);                                                               // private function to create command buffers, just takes in the renderer backend
-void regenerate_framebuffers(renderer_backend* backend, vulkan_swapchain* swapchain, vulkan_renderpass* renderpass);  // private function to create/regenerate framebuffers, pass in pointers to the backend, the swapchain, and the renderpass - going to hook all these together
-b8 recreate_swapchain(renderer_backend* backend);                                                                     // private function to recreate the swapchain, just takes in a pointer to the backend
+void create_command_buffers(renderer_backend* backend);  // private function to create command buffers, just takes in the renderer backend
+void regenerate_framebuffers();                          // private function to create/regenerate framebuffers, pass in pointers to the backend, the swapchain, and the renderpass - going to hook all these together
+b8 recreate_swapchain(renderer_backend* backend);        // private function to recreate the swapchain, just takes in a pointer to the backend
 
 // temporary funtion to test if everything is working correctly
 void upload_data_range(vulkan_context* context, VkCommandPool pool, VkFence fence, VkQueue queue, vulkan_buffer* buffer, u64 offset, u64 size, const void* data) {
@@ -203,18 +202,30 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
         context.framebuffer_height,  // pass in a height
         &context.swapchain);         // address to the swapchain being created
 
-    // vulkan renderpass creation
+    // vulkan renderpass creation - world renderpass
     vulkan_renderpass_create(
-        &context,                                                     // pass in address to context
-        &context.main_renderpass,                                     // pass in the main renderpass
-        0, 0, context.framebuffer_width, context.framebuffer_height,  // pass in an x, y, width and height - render area
-        0.0f, 0.0f, 0.2f, 1.0f,                                       // pass in rgba values - clear color(dark blue)
-        1.0f,                                                         // pass in a depth
-        0);                                                           // pass in a stencil
+        &context,                                                                                                         // pass in address to context
+        &context.main_renderpass,                                                                                         // pass in the main renderpass
+        (vec4){0, 0, context.framebuffer_width, context.framebuffer_height},                                              // pass in an x, y, width and height - render area
+        (vec4){0.0f, 0.0f, 0.2f, 1.0f},                                                                                   // pass in rgba values - clear color(dark blue)
+        1.0f,                                                                                                             // pass in a depth
+        0,                                                                                                                // pass in a stencil
+        RENDERPASS_CLEAR_COLOUR_BUFFER_FLAG | RENDERPASS_CLEAR_DEPTH_BUFFER_FLAG | RENDERPASS_CLEAR_STENCIL_BUFFER_FLAG,  // flags for how clearing is handled
+        false, true);                                                                                                     // is the first renderpass, so none before it, and there are going to be more after it
+
+    // ui renderpass
+    vulkan_renderpass_create(
+        &context,
+        &context.ui_renderpass,                                               // ui renderpass
+        (vec4){0, 0, context.framebuffer_width, context.framebuffer_height},  // render area
+        (vec4){0.0f, 0.0f, 0.0f, 0.0f},                                       // clear color black and fully transparent, not important
+        1.0f,                                                                 // depth
+        0,                                                                    // no stencil for now
+        RENDERPASS_CLEAR_NONE_FLAG,                                           // isnt a fist pass so dont clear anything
+        true, false);                                                         // is not the first pass, and there are no passes after this one yet
 
     // create swapchain frame buffers
-    context.swapchain.framebuffers = darray_reserve(vulkan_framebuffer, context.swapchain.image_count);  // create a swapchain framebuffer array and allocate memory for it using the size of a vulkan framebuffer times the swapchain image count
-    regenerate_framebuffers(backend, &context.swapchain, &context.main_renderpass);                      // call our private function regenerate framebuffers, pass in the backend, and addresses to the swapchain, and the main renderpass
+    regenerate_framebuffers();  // call our private function regenerate framebuffers, pass in the backend, and addresses to the swapchain, and the main renderpass
 
     // create command buffers
     create_command_buffers(backend);
@@ -222,7 +233,6 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     // create syncronization objects
     context.image_available_semaphores = darray_reserve(VkSemaphore, context.swapchain.max_frames_in_flight);  // create a darray and allocated memory for image available semaphores. use the size of a vulkan semaphore times the max frames in flight in the swapchain
     context.queue_complete_semaphores = darray_reserve(VkSemaphore, context.swapchain.max_frames_in_flight);   // create a darray and allocated memory for queue complete semaphores. use the size of a vulkan semaphore times the max frames in flight in the swapchain
-    context.in_flight_fences = darray_reserve(vulkan_fence, context.swapchain.max_frames_in_flight);           // create a darray and allocated memory for in flight fences. use the size of a vulkan fence times the max frames in flight in the swapchain
 
     for (u8 i = 0; i < context.swapchain.max_frames_in_flight; ++i) {  // iterate through the max frames in flight
         // create a vulkan semaphore create info struct, and use the provided macro to input default values into the fields
@@ -233,15 +243,16 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
 
         // create the fence in  a signaled state, indicating that the first frame has already been "rendered". this will prevent the application from waiting indefinately for the first frame to render
         // since it cannot be rendered until a frame is "rendered" before it
-        vulkan_fence_create(&context, true, &context.in_flight_fences[i]);  // use our function to create a fence, pass in the address to the context, set to create in signaled state, fence at index i to be created
+        VkFenceCreateInfo fence_create_info = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+        VK_CHECK(vkCreateFence(context.device.logical_device, &fence_create_info, context.allocator, &context.in_flight_fences[i]));
     }
 
     // create the in flight images
     // in flight fences should not yet exist at this point, so clear the list. these are stored in pointers, because the initial state should be 0, and will be 0 when not in use
     // Actual fences are not owned by this list
-    context.images_in_flight = darray_reserve(vulkan_fence, context.swapchain.image_count);  // create a darray and allocate memory for images in flight array, use the size of a vulkan fence times the number of images in the swap chain for the size
-    for (u32 i = 0; i < context.swapchain.image_count; ++i) {                                // iterate through the swapchain images
-        context.images_in_flight[i] = 0;                                                     // and make sure that all of the images in flight are zeroed out - nothing should be in flight jaust yet
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {  // iterate through the swapchain images
+        context.images_in_flight[i] = 0;                       // and make sure that all of the images in flight are zeroed out - nothing should be in flight jaust yet
     }
 
     // create built in shaders
@@ -249,6 +260,11 @@ b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* app
     if (!vulkan_material_shader_create(&context, &context.material_shader)) {  // if it fails
         KERROR("Error loading built-in basic_lighting shader.");               // throw an error
         return false;                                                          // and boot out
+    }
+    // create the ui shader
+    if (!vulkan_ui_shader_create(&context, &context.ui_shader)) {
+        KERROR("Error loading built-in ui shader.");
+        return false;
     }
 
     // create buffers
@@ -274,6 +290,9 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
     vulkan_buffer_destroy(&context, &context.object_vertex_buffer);
     vulkan_buffer_destroy(&context, &context.object_index_buffer);
 
+    // destroy the ui shader
+    vulkan_ui_shader_destroy(&context, &context.ui_shader);
+
     // destroy the vulkan object shader
     vulkan_material_shader_destroy(&context, &context.material_shader);  // pass in addresses to the context, and the object shader to be destoyed
 
@@ -293,19 +312,13 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
                 context.allocator);                    // and the memory allocation stuffs
             context.queue_complete_semaphores[i] = 0;  // set index i to 0
         }
-        vulkan_fence_destroy(&context, &context.in_flight_fences[i]);  // use our function to destroy the fence at inde i, needs an address to the context, and an address to the fence being destroyed
+        vkDestroyFence(context.device.logical_device, context.in_flight_fences[i], context.allocator);  // use vulkan function to destroy the fence at inde i, needs an address to the context, and an address to the fence being destroyed
     }
     darray_destroy(context.image_available_semaphores);  // destroy the image available semaphores darray and free the memory
     context.image_available_semaphores = 0;              // set the value of the destroyed darray to 0
 
     darray_destroy(context.queue_complete_semaphores);  // destroy the image available semaphores darray and free the memory
     context.queue_complete_semaphores = 0;              // set the value of the destroyed darray to 0
-
-    darray_destroy(context.in_flight_fences);  // destroy the image available semaphores darray and free the memory
-    context.in_flight_fences = 0;              // set the value of the destroyed darray to 0
-
-    darray_destroy(context.images_in_flight);  // destroy the image available semaphores darray and free the memory
-    context.images_in_flight = 0;              // set the value of the destroyed darray to 0
 
     // destroy the command buffers
     for (u32 i = 0; i < context.swapchain.image_count; ++i) {  // iterate through all of the swapchain images
@@ -321,11 +334,15 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
     context.graphics_command_buffers = 0;              // set the command buffers to zero
 
     // destroy the framebuffers
-    for (u32 i = 0; i < context.swapchain.image_count; ++i) {                      // iterate through the swapchain images
-        vulkan_framebuffer_destroy(&context, &context.swapchain.framebuffers[i]);  // use our function to destroy the framebuffer, pass in the address to the context, and the address to the frambuffer at index i
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {  // iterate through the swapchain images
+        vkDestroyFramebuffer(context.device.logical_device, context.world_framebuffers[i], context.allocator);
+        vkDestroyFramebuffer(context.device.logical_device, context.swapchain.framebuffers[i], context.allocator);  // use vk function to destroy the framebuffer, pass in the address to the context, and the address to the frambuffer at index i
     }
 
-    // destroy the render pass
+    // destroy renderpasses
+    // destroy the ui renderpass
+    vulkan_renderpass_destroy(&context, &context.ui_renderpass);
+    // destroy the world render pass
     vulkan_renderpass_destroy(&context, &context.main_renderpass);
 
     // destroy the swapchain
@@ -401,12 +418,10 @@ b8 vulkan_renderer_backend_begin_frame(renderer_backend* backend, f32 delta_time
 
     // if no resizing and no swapchain recreation then
     // wait for the execution of the current frame to complete. the fence being free will allow this one to move on
-    if (!vulkan_fence_wait(                                    // run the function and if it fails
-            &context,                                          // pass in an address to the context
-            &context.in_flight_fences[context.current_frame],  // get the in flight fence for the current frame
-            UINT64_MAX)) {                                     // bogus value
-        KWARN("in-flight fence wait failure");                 // throw warn if it fails
-        return false;                                          // boot out, not too bad an error, but dont continue
+    VkResult result = vkWaitForFences(context.device.logical_device, 1, &context.in_flight_fences[context.current_frame], true, UINT64_MAX);
+    if (!vulkan_result_is_success(result)) {
+        KERROR("In-flight fence wait failure! error: %s", vulkan_result_string(result, true));
+        return false;
     }
 
     // aquire the next image from the swap chain. pass along the semaphore that should be signaled when this completes
@@ -447,21 +462,15 @@ b8 vulkan_renderer_backend_begin_frame(renderer_backend* backend, f32 delta_time
     vkCmdSetScissor(command_buffer->handle, 0, 1, &scissor);    // call a vulkan function to clip everything that is outside of the viewport, pass it the handle to the current framebuffer, viewport index is zero, one viewport, and the scissor rect created above
 
     // set the width and height of the main renderpass by passing in values from the framebuffer -- may be uneccassary to do every frame
-    context.main_renderpass.w = context.framebuffer_width;
-    context.main_renderpass.h = context.framebuffer_height;
-
-    // begin the render pass
-    vulkan_renderpass_begin(
-        command_buffer,                                               // pass in the current command buffer
-        &context.main_renderpass,                                     // an address to the main renderpass
-        context.swapchain.framebuffers[context.image_index].handle);  // and the handle to the frame buffer at image index in context
+    context.main_renderpass.render_area.z = context.framebuffer_width;
+    context.main_renderpass.render_area.w = context.framebuffer_height;
 
     return true;
 }
 
 // update the global state, this will probably control camera movements and such, pass in a view, and projection matrices, the view position, ambient color and the mode
 // none of these are pointers, here we are making copies, so the rest of the engine can keep doing its thing, and mot waiting for this to finish
-void vulkan_renderer_update_global_state(mat4 projection, mat4 view, vec3 view_position, vec4 ambient_colour, i32 mode) {
+void vulkan_renderer_update_global_world_state(mat4 projection, mat4 view, vec3 view_position, vec4 ambient_colour, i32 mode) {
     vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // store a pointer to the current graphics command buffer
 
     // use the shader
@@ -474,31 +483,46 @@ void vulkan_renderer_update_global_state(mat4 projection, mat4 view, vec3 view_p
     // TODO: other ubo properties
 
     // update the global state
-    vulkan_material_shader_update_global_state(&context, &context.material_shader, context.frame_delta_time);
+    vulkan_material_shader_update_global_world_state(&context, &context.material_shader, context.frame_delta_time);
+}
+
+// update the global ui state
+void vulkan_renderer_update_global_ui_state(mat4 projection, mat4 view, i32 mode) {
+    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // store a pointer to the current graphics command buffer
+
+    // use the shader
+    vulkan_ui_shader_use(&context, &context.ui_shader);
+
+    // pass through the view, and projection
+    context.ui_shader.global_ubo.projection = projection;
+    context.ui_shader.global_ubo.view = view;
+
+    // TODO: other ubo properties
+
+    // update the global state
+    vulkan_ui_shader_update_global_state(&context, &context.ui_shader, context.frame_delta_time);
 }
 
 b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) {
     vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // conveinience pointer
-
-    // end the renderpass
-    vulkan_renderpass_end(command_buffer, &context.main_renderpass);  // call our funtion to end renderpass, pass in the current graphics command buffer, and an address to the main renderpass
 
     // end the command buffer- calling our function. just pass in the current graphics command buffer
     vulkan_command_buffer_end(command_buffer);
 
     // make sure the previous frame is not using this image (i.e. its fence is being waited on)
     if (context.images_in_flight[context.image_index] != VK_NULL_HANDLE) {  // if there is acctually in images in flight at image index
-        vulkan_fence_wait(                                                  // call our function to wait for a fence
-            &context,                                                       // pass in an address to the context
-            context.images_in_flight[context.image_index],                  // pass in the image in flight at the image index
-            UINT64_MAX);                                                    // bogus high value
+        VkResult result = vkWaitForFences(context.device.logical_device, 1, context.images_in_flight[context.image_index], true, UINT64_MAX);
+        if (!vulkan_result_is_success(result)) {
+            KERROR("vk_fence_wait error: %s", vulkan_result_string(result, true));
+            return false;
+        }
     }
 
     // mark the image fence as in use by this frame
     context.images_in_flight[context.image_index] = &context.in_flight_fences[context.current_frame];  // assign the current inflight fence to the image in flight at image index
 
     // reset the fence for use on the next frame
-    vulkan_fence_reset(&context, &context.in_flight_fences[context.current_frame]);  // use out function to reset a fence, pass in the address to the context, the address to the in flight fence of the current frame
+    VK_CHECK(vkResetFences(context.device.logical_device, 1, &context.in_flight_fences[context.current_frame]));  // use vk function to reset a fence, pass in the address to the context, the address to the in flight fence of the current frame
 
     // call to submit the work
     // submit the queue and wait for the operation to complete
@@ -523,11 +547,11 @@ b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) 
     VkPipelineStageFlags flags[1] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};  // eventually there will be more here, this accepts an array
     submit_info.pWaitDstStageMask = flags;                                            // pass all the flags in
 
-    VkResult result = vkQueueSubmit(                              // run the vulkan function to submit a queue and store the results in result
-        context.device.graphics_queue,                            // pass in the graphics queue
-        1,                                                        // only submitting one queue for now
-        &submit_info,                                             // pass in the info struct we just created
-        context.in_flight_fences[context.current_frame].handle);  // and the handle to the in flight fence at the index of the current frame
+    VkResult result = vkQueueSubmit(                       // run the vulkan function to submit a queue and store the results in result
+        context.device.graphics_queue,                     // pass in the graphics queue
+        1,                                                 // only submitting one queue for now
+        &submit_info,                                      // pass in the info struct we just created
+        context.in_flight_fences[context.current_frame]);  // and the handle to the in flight fence at the index of the current frame
 
     // check the results of submit
     if (result != VK_SUCCESS) {                                                              // if the submit was unsuccessful
@@ -551,6 +575,65 @@ b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) 
         context.image_index);                                      // and the image index
 
     // if all of this has passed, we have rendered to the screen
+    return true;
+}
+
+// begin a render pass
+b8 vulkan_renderer_begin_renderpass(struct renderer_backend* backend, u8 renderpass_id) {
+    vulkan_renderpass* renderpass = 0;
+    VkFramebuffer framebuffer = 0;
+    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];
+
+    // choose a renderpass based on id
+    switch (renderpass_id) {
+        case BUILTIN_RENDERPASS_WORLD:
+            renderpass = &context.main_renderpass;
+            framebuffer = context.world_framebuffers[context.image_index];
+            break;
+        case BUILTIN_RENDERPASS_UI:
+            renderpass = &context.ui_renderpass;
+            framebuffer = context.swapchain.framebuffers[context.image_index];
+            break;
+        default:
+            KERROR("vulkan_renderer_begin_renderpass called on unrecognized id: %#02x", renderpass_id);
+            return false;
+    }
+
+    // begin the render pass
+    vulkan_renderpass_begin(command_buffer, renderpass, framebuffer);
+
+    // use the appropriate shader
+    switch (renderpass_id) {
+        case BUILTIN_RENDERPASS_WORLD:
+            vulkan_material_shader_use(&context, &context.material_shader);
+            break;
+        case BUILTIN_RENDERPASS_UI:
+            vulkan_ui_shader_use(&context, &context.ui_shader);
+            break;
+    }
+
+    return true;
+}
+
+// end a render pass
+b8 vulkan_renderer_end_renderpass(struct renderer_backend* backend, u8 renderpass_id) {
+    vulkan_renderpass* renderpass = 0;
+    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];
+
+    // choose a renderpass based on id
+    switch (renderpass_id) {
+        case BUILTIN_RENDERPASS_WORLD:
+            renderpass = &context.main_renderpass;
+            break;
+        case BUILTIN_RENDERPASS_UI:
+            renderpass = &context.ui_renderpass;
+            break;
+        default:
+            KERROR("vulkan_renderer_end_renderpass called on unrecognised renderpass id:  %#02x", renderpass_id);
+            return false;
+    }
+
+    vulkan_renderpass_end(command_buffer, renderpass);
     return true;
 }
 
@@ -620,22 +703,34 @@ void create_command_buffers(renderer_backend* backend) {  // private function to
 }
 
 // private function to create/regenerate framebuffers, pass in pointers to the backend, the swapchain, and the renderpass - going to hook all these together
-void regenerate_framebuffers(renderer_backend* backend, vulkan_swapchain* swapchain, vulkan_renderpass* renderpass) {
-    for (u32 i = 0; i < swapchain->image_count; ++i) {  // iterate through all the swap chain image count. - we need a framebuffer for each swapchain image
-        // TODO: make this dynamic based on the currently configured attachments
-        u32 attachment_count = 2;                                        // set attachment count to 2, for now
-        VkImageView attachments[] = {                                    // create a vulkan view attachments array
-                                     swapchain->views[i],                // pass in the swap chain view at index i
-                                     swapchain->depth_attachment.view};  // and the swapchain depth attachment view
+void regenerate_framebuffers() {
+    u32 image_count = context.swapchain.image_count;
+    for (u32 i = 0; i < image_count; ++i) {  // iterate through all the swap chain image count. - we need a framebuffer for each swapchain image
+        // world framebuffers
+        // create and fill out the struct for creating framebuffers, start with default values using the vulkan macro
+        VkImageView world_attachments[2] = {context.swapchain.views[i], context.swapchain.depth_attachment.view};
+        VkFramebufferCreateInfo framebuffer_create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+        framebuffer_create_info.renderPass = context.main_renderpass.handle;
+        framebuffer_create_info.attachmentCount = 2;
+        framebuffer_create_info.pAttachments = world_attachments;
+        framebuffer_create_info.width = context.framebuffer_width;
+        framebuffer_create_info.height = context.framebuffer_height;
+        framebuffer_create_info.layers = 1;
 
-        vulkan_framebuffer_create(                // call our function to create a framebuffer
-            &context,                             // pass in an address to the context
-            renderpass,                           // pass through the renderpass
-            context.framebuffer_width,            // and the width
-            context.framebuffer_height,           // and height
-            attachment_count,                     // attachment counts defined above
-            attachments,                          // array created above
-            &context.swapchain.framebuffers[i]);  // address of the framebuffer being created at index i
+        VK_CHECK(vkCreateFramebuffer(context.device.logical_device, &framebuffer_create_info, context.allocator, &context.world_framebuffers[i]));
+
+        // swapchain framebuffers (ui pass). outputs to swapchain images
+        // create and fill out the struct for creating framebuffers, start with default values using the vulkan macro
+        VkImageView ui_attachments[1] = {context.swapchain.views[i]};
+        VkFramebufferCreateInfo sc_framebuffer_create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+        sc_framebuffer_create_info.renderPass = context.ui_renderpass.handle;
+        sc_framebuffer_create_info.attachmentCount = 1;
+        sc_framebuffer_create_info.pAttachments = ui_attachments;
+        sc_framebuffer_create_info.width = context.framebuffer_width;
+        sc_framebuffer_create_info.height = context.framebuffer_height;
+        sc_framebuffer_create_info.layers = 1;
+
+        VK_CHECK(vkCreateFramebuffer(context.device.logical_device, &sc_framebuffer_create_info, context.allocator, &context.swapchain.framebuffers[i]));
     }
 }
 
@@ -680,8 +775,8 @@ b8 recreate_swapchain(renderer_backend* backend) {  // private function to recre
     // sync the framebuffer size with the cached sizes
     context.framebuffer_width = cached_framebuffer_width;
     context.framebuffer_height = cached_framebuffer_height;
-    context.main_renderpass.w = context.framebuffer_width;
-    context.main_renderpass.h = context.framebuffer_height;
+    context.main_renderpass.render_area.z = context.framebuffer_width;
+    context.main_renderpass.render_area.w = context.framebuffer_height;
 
     // reset the cached sizes to zero
     cached_framebuffer_width = 0;
@@ -696,18 +791,19 @@ b8 recreate_swapchain(renderer_backend* backend) {  // private function to recre
     }
 
     // destroy the framebuffers, they are no longer valid
-    for (u32 i = 0; i < context.swapchain.image_count; ++i) {                      // iterate through the swapchain images
-        vulkan_framebuffer_destroy(&context, &context.swapchain.framebuffers[i]);  // use our function to destroy a framebuffer, pass in an address to the context, and the address to the frambuffer at index i, the one being destroyed
+    for (u32 i = 0; i < context.swapchain.image_count; ++i) {                                                       // iterate through the swapchain images
+        vkDestroyFramebuffer(context.device.logical_device, context.world_framebuffers[i], context.allocator);      // use our function to destroy a framebuffer, pass in an address to the context, and the address to the frambuffer at index i, the one being destroyed
+        vkDestroyFramebuffer(context.device.logical_device, context.swapchain.framebuffers[i], context.allocator);  // use our function to destroy a framebuffer, pass in an address to the context, and the address to the frambuffer at index i, the one being destroyed
     }
 
     // copy over a new render area - set the x and y to 0, and get the size from the framebuffer
-    context.main_renderpass.x = 0;
-    context.main_renderpass.y = 0;
-    context.main_renderpass.w = context.framebuffer_width;
-    context.main_renderpass.h = context.framebuffer_height;
+    context.main_renderpass.render_area.x = 0;
+    context.main_renderpass.render_area.y = 0;
+    context.main_renderpass.render_area.z = context.framebuffer_width;
+    context.main_renderpass.render_area.w = context.framebuffer_height;
 
-    // re create the framebuffers
-    regenerate_framebuffers(backend, &context.swapchain, &context.main_renderpass);  // call our regen framebuffers function, pass it the backend, an address to the swapchain, and an address to the main renderpass
+    // re create the world framebuffers and the swapchain
+    regenerate_framebuffers();  // call our regen framebuffers function, pass it the backend, an address to the swapchain, and an address to the main renderpass
 
     // re create the command buffers
     create_command_buffers(backend);  // pass it the backend
@@ -720,6 +816,8 @@ b8 recreate_swapchain(renderer_backend* backend) {  // private function to recre
 
 b8 create_buffers(vulkan_context* context) {
     VkMemoryPropertyFlagBits memory_property_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;  // only use memory that is local to the host, this makes it faster
+
+    // geometry vertex buffer
     // set the vertex buffer size, after the vertex 3d is finished this will total 64mb
     const u64 vertex_buffer_size = sizeof(vertex_3d) * 1024 * 1024;
     if (!vulkan_buffer_create(   // call the create buffer function. and check if it succeeds
@@ -734,6 +832,7 @@ b8 create_buffers(vulkan_context* context) {
     }
     context->geometry_index_offset = 0;
 
+    // geometry index buffer
     // set the index buffer size,
     const u64 index_buffer_size = sizeof(u32) * 1024 * 1024;
     if (!vulkan_buffer_create(  // call the create buffer function. and check if it succeeds

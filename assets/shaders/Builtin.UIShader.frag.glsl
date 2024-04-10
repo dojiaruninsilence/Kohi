@@ -1,5 +1,3 @@
-// the fragment shader determines the color that gets out put
-// need to look these two things here up
 #version 450
 
 layout(location = 0) out vec4 out_colour;

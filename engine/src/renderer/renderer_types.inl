@@ -10,31 +10,17 @@ typedef enum renderer_backend_type {
     RENDERER_BACKEND_TYPE_DIRECTX
 } renderer_backend_type;
 
-// nvidia has a deal where these have to be 256 bytes perfectly, so its set up like this
-// where we are going to hold the data for the global uniforms
-typedef struct global_uniform_object {
-    mat4 projection;   // store projection matrices - 64bytes
-    mat4 view;         // store view matrices       - 64bytes
-    mat4 m_reserved0;  // 64 bytes, reserved for future use
-    mat4 m_reserved1;  // 64 bytes, reserved for future use
-} global_uniform_object;
-
-// this name will change, but for now - like the global ubo, but this one is for each object - so potentially updating every frame for every object
-typedef struct material_uniform_object {
-    vec4 diffuse_color;  // 16 bytes
-    vec4 v_reserved0;    // 16 bytes, reserved for future use
-    vec4 v_reserved1;    // 16 bytes, reserved for future use
-    vec4 v_reserved2;    // 16 bytes, reserved for future use
-    mat4 m_reserved0;    // 64 bytes, reserved for future use // added from future changes to limp along Shader system feature #38  https://github.com/travisvroman/kohi/pull/38
-    mat4 m_reserved1;    // 64 bytes, reserved for future use
-    mat4 m_reserved2;    // 64 bytes, reserved for future use
-} material_uniform_object;
-
 // where the data for geometry to be rendered is stored - and a way to pass the geometry to the renderer
 typedef struct geometry_render_data {
     mat4 model;          // model matrix for a batch of geometry
     geometry* geometry;  // hold a pointer to a material
 } geometry_render_data;
+
+// enum to pass the renderpass id
+typedef enum builtin_renderpass {
+    BUILTIN_RENDERPASS_WORLD = 0x01,
+    BUILTIN_RENDERPASS_UI = 0x02
+} builtin_renderpass;
 
 // one of the places object oriented programing makes sense
 // represents the renderer backend
@@ -53,11 +39,17 @@ typedef struct renderer_backend {
     b8 (*begin_frame)(struct renderer_backend* backend, f32 delta_time);  // boolean, make sure frame begins succeffully. takes in delta time as well as the backend
 
     // rendering occurs inbetween
-    // update the global state
-    void (*update_global_state)(mat4 projection, mat4 view, vec3 view_position, vec4 ambient_colour, i32 mode);
+    // update the global world state
+    void (*update_global_world_state)(mat4 projection, mat4 view, vec3 view_position, vec4 ambient_colour, i32 mode);
+    // update the global ui state
+    void (*update_global_ui_state)(mat4 projection, mat4 view, i32 mode);
 
     // end frame cleans everything up for the next frame
     b8 (*end_frame)(struct renderer_backend* backend, f32 delta_time);  // boolean, make sure frame ends succeffully. takes in delta time as well as the backend
+
+    // begin a renderpass
+    b8 (*begin_renderpass)(struct renderer_backend* backend, u8 renderpass_id);
+    b8 (*end_renderpass)(struct renderer_backend* backend, u8 rederpass_id);
 
     // update an object using push constants - just pass in a model to upload
     void (*draw_geometry)(geometry_render_data data);  // changed the name of this you have to make sure that everything down form it is changed as well
@@ -86,4 +78,7 @@ typedef struct render_packet {
 
     u32 geometry_count;                // number of geometries in the array
     geometry_render_data* geometries;  // a pointer to an array of geometries
+
+    u32 ui_geometry_count;                // number of geometries in the array for the ui
+    geometry_render_data* ui_geometries;  // a pointer to an array of geometries for the ui
 } render_packet;

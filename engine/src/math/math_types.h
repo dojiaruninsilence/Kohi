@@ -76,3 +76,9 @@ typedef struct vertex_3d {
     vec3 position;  // we are only going to hold the position to start with in a vec3
     vec2 texcoord;
 } vertex_3d;
+
+// for 2 dimentional renderering
+typedef struct vertex_2d {
+    vec2 position;
+    vec2 texcoord;
+} vertex_2d;

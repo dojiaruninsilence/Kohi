@@ -2,7 +2,7 @@
 
 // allows us to take in individual vertex data and configure it to pass to the fragment shader
 // in from the application side
-layout(location = 0) in vec3 in_position;
+layout(location = 0) in vec2 in_position;
 layout(location = 1) in vec2 in_texcoord;
 
 // very similar to a stucture in c
@@ -10,7 +10,7 @@ layout(location = 1) in vec2 in_texcoord;
 // set refers to a descriptor set
 layout(set = 0, binding = 0) uniform global_uniform_object { // structure definition
     mat4 projection;
-    mat4 view;
+	mat4 view;
 } global_ubo; // name variable
 
 layout(push_constant) uniform push_constants {
@@ -28,7 +28,9 @@ layout(location = 1) out struct dto {
 } out_dto;
 
 void main() {
-    out_dto.tex_coord = in_texcoord; // pass the tex coords to the frag shader
+    // NOTE: intentionally flip y texture coordinate. this, along with flipped ortho matrix, puts [0, 0] in the top left
+    // instead of the bottom left and adjusts texture coordinates to show in the right direction
+    out_dto.tex_coord = vec2(in_texcoord.x, 1.0 - in_texcoord.y); // pass the tex coords to the frag shader
     // the final position sent to the fragment shader, is projection matrix times the view matrix times the position, when we add a model matrix, it will go in between view and position, the order is important
-    gl_Position = global_ubo.projection * global_ubo.view * u_push_constants.model * vec4(in_position, 1.0); 
+    gl_Position = global_ubo.projection * global_ubo.view * u_push_constants.model * vec4(in_position, 0.0, 1.0);
 }

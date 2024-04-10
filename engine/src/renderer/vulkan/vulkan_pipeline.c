@@ -10,6 +10,7 @@
 b8 vulkan_graphics_pipeline_create(                 // returns a bool
     vulkan_context* context,                        // pass in a pointer to the context
     vulkan_renderpass* renderpass,                  // pass in a pointer to a renderpass - one with the same setup
+    u32 stride,                                     // the amnt of memory each element(vertex 3d) will take for offsetting purposes
     u32 attribute_count,                            // pass in an attribute count
     VkVertexInputAttributeDescription* attributes,  // pass in the attributes
     u32 descriptor_set_layout_count,                // pass in the descriptor set layout count
@@ -19,6 +20,7 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
     VkViewport viewport,                            // a vulkan viewport
     VkRect2D scissor,                               // scissor is the area that is rendered and what is clipped off
     b8 is_wireframe,                                // is it a wirframe
+    b8 depth_test_enabled,                          // for depth attachments and such
     vulkan_pipeline* out_pipeline) {                // pointer to where the pipeline created will be
     // view port state
     // create the vulkan struct for creating a pipeline viewport state, use the macro to format and fill with default values
@@ -55,11 +57,13 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
     // depth and stencil testing
     // create the vulkan struct for creating a pipeline depth stencil state, use the macro to format and fill with default values
     VkPipelineDepthStencilStateCreateInfo depth_stencil = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
-    depth_stencil.depthTestEnable = VK_TRUE;            // depth testing enabled, believe this is 3d stuffs
-    depth_stencil.depthWriteEnable = VK_TRUE;           // depth write enabled - enables writing to the depth buffer
-    depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;  // depth compare operation is set to less - use less than in comparisons for depth - for what gets clipped
-    depth_stencil.depthBoundsTestEnable = VK_FALSE;     // not using now
-    depth_stencil.stencilTestEnable = VK_FALSE;
+    if (depth_test_enabled) {
+        depth_stencil.depthTestEnable = VK_TRUE;            // depth testing enabled, believe this is 3d stuffs
+        depth_stencil.depthWriteEnable = VK_TRUE;           // depth write enabled - enables writing to the depth buffer
+        depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;  // depth compare operation is set to less - use less than in comparisons for depth - for what gets clipped
+        depth_stencil.depthBoundsTestEnable = VK_FALSE;     // not using now
+        depth_stencil.stencilTestEnable = VK_FALSE;
+    }
 
     // color blending -- defines how colors are written to the image
     VkPipelineColorBlendAttachmentState color_blend_attachement_state;                          // create a vulkan struct
@@ -98,7 +102,7 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
     // vertex input
     VkVertexInputBindingDescription binding_description;          // create vulkan binding description struct
     binding_description.binding = 0;                              // the binding index
-    binding_description.stride = sizeof(vertex_3d);               //  stride is the amount of bytes in a vertex_3d
+    binding_description.stride = stride;                          //  stride is the amount of bytes in an element
     binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;  // move to next data entry for each vertex
 
     // attributes
@@ -149,7 +153,7 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
     pipeline_create_info.pViewportState = &viewport_state;  // pass in the viewport state info created above
     pipeline_create_info.pRasterizationState = &rasterizer_create_info;
     pipeline_create_info.pMultisampleState = &multisampling_create_info;
-    pipeline_create_info.pDepthStencilState = &depth_stencil;
+    pipeline_create_info.pDepthStencilState = depth_test_enabled ? &depth_stencil : 0;
     pipeline_create_info.pColorBlendState = &color_blend_state_create_info;
     pipeline_create_info.pDynamicState = &dynamic_state_create_info;
     pipeline_create_info.pTessellationState = 0;  // nothing here for now

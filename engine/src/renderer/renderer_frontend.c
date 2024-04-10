@@ -20,6 +20,8 @@ typedef struct renderer_system_state {
     renderer_backend backend;  // store the renderer backend
     mat4 projection;           // store the projection matrix
     mat4 view;                 // store a calculated view matrix
+    mat4 ui_projection;        // store the projection matrix for the ui
+    mat4 ui_view;              // store a calculated view matrix for the ui
     f32 near_clip;             // hang on to the near_clip value
     f32 far_clip;              // hang on to the far_clip value
 } renderer_system_state;
@@ -45,15 +47,21 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
         return false;                                                             // and shut down the renderer initialize - boot out
     }
 
+    // world projection and view
     // define the near and far clip
     state_ptr->near_clip = 0.1f;
     state_ptr->far_clip = 1000.0f;
     // define default values for the projection matrix - using a perspective style matrix
     state_ptr->projection = mat4_perspective(deg_to_rad(45.0f), 1280 / 720.0f, state_ptr->near_clip, state_ptr->far_clip);
 
+    // TODO: configurable camera starting position
     // define default values for the view matrix
     state_ptr->view = mat4_translation((vec3){0, 0, 30.0f});
     state_ptr->view = mat4_inverse(state_ptr->view);
+
+    // ui projection and view
+    state_ptr->ui_projection = mat4_orthographic(0, 1280.0f, 720.0f, 0, -100.0f, 100.0f);  // intentionally flipped on the y axis
+    state_ptr->ui_view = mat4_inverse(mat4_identity());
 
     return true;
 }
@@ -66,28 +74,11 @@ void renderer_system_shutdown(void* state) {
     state_ptr = 0;  // reset the state pinter to zero
 }
 
-// begin a renderer frame - pass in the delta time
-b8 renderer_begin_frame(f32 delta_time) {
-    if (!state_ptr) {
-        return false;
-    }
-    return state_ptr->backend.begin_frame(&state_ptr->backend, delta_time);  // call backend begin frame pointer function
-}
-
-// end a renderer frame - pass in the delta time
-b8 renderer_end_frame(f32 delta_time) {
-    if (!state_ptr) {
-        return false;
-    }
-    b8 result = state_ptr->backend.end_frame(&state_ptr->backend, delta_time);  // call backend end frame pointer function
-    state_ptr->backend.frame_number++;                                          // increment the backend frame number
-    return result;
-}
-
 // on a renderer resize
 void renderer_on_resized(u16 width, u16 height) {
     if (state_ptr) {                                                                                                                  // verify that a renderer backend exists to resize
         state_ptr->projection = mat4_perspective(deg_to_rad(45.0f), width / (f32)height, state_ptr->near_clip, state_ptr->far_clip);  // re calculate the perspective matrix
+        state_ptr->ui_projection = mat4_orthographic(0, (f32)width, (f32)height, 0, -100.0f, 100.0f);                                 // intentionally flipped on the y axis,
         state_ptr->backend.resized(&state_ptr->backend, width, height);                                                               // call the pointer function resized and pass in the backend, and pass through the width and the height
     } else {                                                                                                                          // if no backend
         KWARN("renderer backend does not exist to accept resize: %i %i", width, height);                                              // throw a warning
@@ -97,18 +88,52 @@ void renderer_on_resized(u16 width, u16 height) {
 // where the application calls for all draw calls?
 b8 renderer_draw_frame(render_packet* packet) {
     // if the begin frame returned successfully, mid-frame operations may continue
-    if (renderer_begin_frame(packet->delta_time)) {  // call backend begin frame pointer function, pass in the delta time from the packet
+    if (state_ptr->backend.begin_frame(&state_ptr->backend, packet->delta_time)) {  // call backend begin frame pointer function, pass in the delta time from the packet
+        // world renderpass
+        if (!state_ptr->backend.begin_renderpass(&state_ptr->backend, BUILTIN_RENDERPASS_WORLD)) {
+            KERROR("backend.begin_renderpass -> BUILTIN_RENDERPASS_WORLD failed. Application shutting down...");
+            return false;
+        }
 
         // update the global state - just passing in default like values for now, to test it - the projection is being calculated now, and view matrix has default values as well
-        state_ptr->backend.update_global_state(state_ptr->projection, state_ptr->view, vec3_zero(), vec4_one(), 0);
+        state_ptr->backend.update_global_world_state(state_ptr->projection, state_ptr->view, vec3_zero(), vec4_one(), 0);
 
+        // draw geometries.
         u32 count = packet->geometry_count;
         for (u32 i = 0; i < count; ++i) {
             state_ptr->backend.draw_geometry(packet->geometries[i]);
         }
 
+        // end the world renderpass
+        if (!state_ptr->backend.end_renderpass(&state_ptr->backend, BUILTIN_RENDERPASS_WORLD)) {
+            KERROR("backend.end_renderpass -> BUILTIN_RENDERPASS_WORLD failed. Application shutting down...");
+            return false;
+        }
+
+        // ui renderpass
+        if (!state_ptr->backend.begin_renderpass(&state_ptr->backend, BUILTIN_RENDERPASS_UI)) {
+            KERROR("backend.begin_renderpass -> BUILTIN_RENDERPASS_UI failed. Application shutting down...");
+            return false;
+        }
+
+        // update the ui global state
+        state_ptr->backend.update_global_ui_state(state_ptr->ui_projection, state_ptr->ui_view, 0);
+
+        // draw ui geometries.
+        count = packet->ui_geometry_count;
+        for (u32 i = 0; i < count; ++i) {
+            state_ptr->backend.draw_geometry(packet->ui_geometries[i]);
+        }
+
+        // end the ui renderpass
+        if (!state_ptr->backend.end_renderpass(&state_ptr->backend, BUILTIN_RENDERPASS_UI)) {
+            KERROR("backend.end_renderpass -> BUILTIN_RENDERPASS_UI failed. Application shutting down...");
+            return false;
+        }
+
         // end the frame if this fails, it is likely unrecoverable
-        b8 result = renderer_end_frame(packet->delta_time);  // call backend end frame pointer function pointer, pass the delta time from the packet, increment the frame number
+        b8 result = state_ptr->backend.end_frame(&state_ptr->backend, packet->delta_time);
+        state_ptr->backend.frame_number++;
 
         if (!result) {
             KERROR("renderer_end_frame failed. application shutting down...");

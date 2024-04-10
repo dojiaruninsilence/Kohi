@@ -6,6 +6,7 @@
 b8 vulkan_graphics_pipeline_create(
     vulkan_context* context,                        // pass in a pointer to the context
     vulkan_renderpass* renderpass,                  // pass in a pointer to a renderpass - one with the same setup
+    u32 stride,                                     // the amnt of memory each element(vertex 3d) will take for offsetting purposes
     u32 attribute_count,                            // pass in an attribute count
     VkVertexInputAttributeDescription* attributes,  // pass in the attributes
     u32 descriptor_set_layout_count,                // pass in the descriptor set layout count
@@ -15,6 +16,7 @@ b8 vulkan_graphics_pipeline_create(
     VkViewport viewport,                            // a vulkan viewport
     VkRect2D scissor,                               // scissor is the area that is rendered and what is clipped off
     b8 is_wireframe,                                // is it a wirframe
+    b8 depth_test_enabled,                          // for depth attachments and such
     vulkan_pipeline* out_pipeline);                 // pointer to where the pipeline created will be
 
 // destroy a vulkan pipeline, just takes in the context and the pipeline to destroy

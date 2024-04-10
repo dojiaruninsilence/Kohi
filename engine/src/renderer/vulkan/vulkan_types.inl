@@ -76,22 +76,18 @@ typedef enum vulkan_render_pass_state {
 // where we will hold the data for the vulkan renderpass
 typedef struct vulkan_renderpass {
     VkRenderPass handle;  // store the handle to the vulkan render pass
-    f32 x, y, w, h;       // store info for the render area for the renderpass
-    f32 r, g, b, a;       // store the info for the clear color for the renderpass
+    vec4 render_area;     // store info for the render area for the renderpass
+    vec4 clear_colour;    // store the info for the clear color for the renderpass
 
     f32 depth;    // store the info for the renderpass depth
     u32 stencil;  // need to look up, but has something to do with depth
 
+    u8 clear_flags;  // flags to describe how the renderpass will handle clearing the screen
+    b8 has_prev_pass;
+    b8 has_next_pass;
+
     vulkan_render_pass_state state;  // track the state of the vulkan render pass
 } vulkan_renderpass;
-
-// where we store the data for the vulkan framebuffer
-typedef struct vulkan_framebuffer {
-    VkFramebuffer handle;           // store the handle to the framebuffer
-    u32 attachment_count;           // keep a count of the number of attachments
-    VkImageView* attachments;       // a pointer to an array of attachments
-    vulkan_renderpass* renderpass;  // hold a pointer to the renderpass it is associated with
-} vulkan_framebuffer;
 
 // where we hold the data for the vulkan swapchain
 typedef struct vulkan_swapchain {
@@ -105,7 +101,7 @@ typedef struct vulkan_swapchain {
     vulkan_image depth_attachment;  // where to store the info for the depth image
 
     // framebuffers used for onscreen rendering
-    vulkan_framebuffer* framebuffers;  // an array of framebuffers
+    VkFramebuffer framebuffers[3];  // an array of framebuffers
 } vulkan_swapchain;
 
 // an enumeration of all the vulkan command buffer states - these are actually changed within vulkan, but we need to keep track of them for the application
@@ -125,12 +121,6 @@ typedef struct vulkan_command_buffer {
     // command buffer state
     vulkan_command_buffer_state state;  // keep track of the state of the command buffer
 } vulkan_command_buffer;
-
-// where we store the info for fences
-typedef struct vulkan_fence {
-    VkFence handle;  // holds a handle to the fence
-    b8 is_signaled;  // and a bool on whether it is signaled or not - signaled because an operation has completed
-} vulkan_fence;
 
 // where we hold the data for creating shader stages
 typedef struct vulkan_shader_stage {
@@ -184,6 +174,26 @@ typedef struct vulkan_geometry_data {
     u32 index_buffer_offset;
 } vulkan_geometry_data;
 
+// nvidia has a deal where these have to be 256 bytes perfectly, so its set up like this
+// where we are going to hold the data for the global uniforms
+typedef struct vulkan_material_shader_global_ubo {
+    mat4 projection;   // store projection matrices - 64bytes
+    mat4 view;         // store view matrices       - 64bytes
+    mat4 m_reserved0;  // 64 bytes, reserved for future use
+    mat4 m_reserved1;  // 64 bytes, reserved for future use
+} vulkan_material_shader_global_ubo;
+
+// this name will change, but for now - like the global ubo, but this one is for each object - so potentially updating every frame for every object
+typedef struct vulkan_material_shader_instance_ubo {
+    vec4 diffuse_color;  // 16 bytes
+    vec4 v_reserved0;    // 16 bytes, reserved for future use
+    vec4 v_reserved1;    // 16 bytes, reserved for future use
+    vec4 v_reserved2;    // 16 bytes, reserved for future use
+    mat4 m_reserved0;    // 64 bytes, reserved for future use // added from future changes to limp along Shader system feature #38  https://github.com/travisvroman/kohi/pull/38
+    mat4 m_reserved1;    // 64 bytes, reserved for future use
+    mat4 m_reserved2;    // 64 bytes, reserved for future use
+} vulkan_material_shader_instance_ubo;
+
 typedef struct vulkan_material_shader {
     // vertex, fragment, ect
     vulkan_shader_stage stages[MATERIAL_SHADER_STAGE_COUNT];  // hold an array of shader stages, using the count of object shader stages this struct will hold
@@ -197,7 +207,7 @@ typedef struct vulkan_material_shader {
     b8 descriptor_updated[3];
 
     // global uniform object
-    global_uniform_object global_ubo;  // store global object stuffs like view, and projection matrices
+    vulkan_material_shader_global_ubo global_ubo;  // store global object stuffs like view, and projection matrices
 
     // global uniform buffer
     vulkan_buffer global_uniform_buffer;
@@ -220,6 +230,79 @@ typedef struct vulkan_material_shader {
     vulkan_pipeline pipeline;  // hold the vulkan pipeline struct
 
 } vulkan_material_shader;
+
+#define UI_SHADER_STAGE_COUNT 2
+#define VULKAN_UI_SHADER_DESCRIPTOR_COUNT 2
+#define VULKAN_UI_SHADER_SAMPLER_COUNT 1
+
+// max number of ui control instances
+// TODO: make configurable
+#define VULKAN_MAX_UI_COUNT 1024
+
+// store the state for the ui shader
+typedef struct vulkan_ui_shader_instance_state {
+    // per frame
+    VkDescriptorSet descriptor_sets[3];
+
+    // per descriptor
+    vulkan_descriptor_state descriptor_states[VULKAN_UI_SHADER_DESCRIPTOR_COUNT];
+} vulkan_ui_shader_instance_state;
+
+// @brief vulkan specific uniform buffer object for the ui shader.
+typedef struct vulkan_ui_shader_global_ubo {
+    mat4 projection;   // store projection matrices - 64bytes
+    mat4 view;         // store view matrices       - 64bytes
+    mat4 m_reserved0;  // 64 bytes, reserved for future use
+    mat4 m_reserved1;  // 64 bytes, reserved for future use
+} vulkan_ui_shader_global_ubo;
+
+// @brief vulkan specific ui material instance uniform buffer object for the ui shader
+typedef struct vulkan_ui_shader_instance_ubo {
+    vec4 diffuse_color;  // 16 bytes
+    vec4 v_reserved0;    // 16 bytes, reserved for future use
+    vec4 v_reserved1;    // 16 bytes, reserved for future use
+    vec4 v_reserved2;    // 16 bytes, reserved for future use
+    mat4 m_reserved0;    // 64 bytes, reserved for future use // added from future changes to limp along Shader system feature #38  https://github.com/travisvroman/kohi/pull/38
+    mat4 m_reserved1;    // 64 bytes, reserved for future use
+    mat4 m_reserved2;    // 64 bytes, reserved for future use
+} vulkan_ui_shader_instance_ubo;
+
+// store the ui shader itself
+typedef struct vulkan_ui_shader {
+    // vertex, fragment
+    vulkan_shader_stage stages[UI_SHADER_STAGE_COUNT];
+
+    // descriptor stuffs
+    VkDescriptorPool global_descriptor_pool;             // descriptors are like command buffers, in that that come from and return too a pool
+    VkDescriptorSetLayout global_descriptor_set_layout;  // defines the layout of a descriptor set
+
+    // one descriptor set per frame - max 3 for triple-buffering
+    VkDescriptorSet global_descriptor_sets[3];
+    b8 descriptor_updated[3];
+
+    // global uniform object
+    vulkan_material_shader_global_ubo global_ubo;  // store global object stuffs like view, and projection matrices
+
+    // global uniform buffer
+    vulkan_buffer global_uniform_buffer;
+
+    // object level stuffs
+    // descriptor stuffs
+    VkDescriptorPool object_descriptor_pool;  // same as for global ones but for objects instead
+    VkDescriptorSetLayout object_descriptor_set_layout;
+    // object uniform buffers - large buffer to handle all objects
+    vulkan_buffer object_uniform_buffer;
+    // TODO: manage a free list of some kind here instead
+    u32 object_uniform_buffer_index;
+
+    texture_use sampler_uses[VULKAN_UI_SHADER_SAMPLER_COUNT];
+
+    // TODO: make dynamic
+    vulkan_ui_shader_instance_state instance_states[VULKAN_MAX_UI_COUNT];
+
+    // pipeline
+    vulkan_pipeline pipeline;  // hold the vulkan pipeline struct
+} vulkan_ui_shader;
 
 // this is where we hold all of our static data for this renderer
 typedef struct vulkan_context {
@@ -251,6 +334,7 @@ typedef struct vulkan_context {
 
     vulkan_swapchain swapchain;         // vulkan swapchain - controls images to be rendered to and presented, hold the images
     vulkan_renderpass main_renderpass;  // store the main vulkan render pass
+    vulkan_renderpass ui_renderpass;    // store the ui renderpass
 
     // buffers stuffs
     vulkan_buffer object_vertex_buffer;  // store vertex buffers
@@ -266,11 +350,11 @@ typedef struct vulkan_context {
     // darray
     VkSemaphore* queue_complete_semaphores;  // triggered when a queue has been run and the image is ready to be presented
 
-    u32 in_flight_fence_count;       // need to keep track of how many fences are in flight
-    vulkan_fence* in_flight_fences;  // the array of fences in flight
+    u32 in_flight_fence_count;    // need to keep track of how many fences are in flight
+    VkFence in_flight_fences[2];  // the array of fences in flight
 
-    // holds pointers to fences which exist and are owned elsewhere
-    vulkan_fence** images_in_flight;  // possibly they are in in flight fences at the moment, keeps track of them
+    // holds pointers to fences which exist and are owned elsewhere, one per frame
+    VkFence* images_in_flight[3];  // possibly they are in in flight fences at the moment, keeps track of them
 
     u32 image_index;    // to keep track of images in the swap chain - index of the image that we are currently using
     u32 current_frame;  // keep track of the frames
@@ -278,12 +362,16 @@ typedef struct vulkan_context {
     b8 recreating_swapchain;  // a state that needs to be tracked in the render loop
 
     vulkan_material_shader material_shader;  // where we store the object shader infos
+    vulkan_ui_shader ui_shader;              // where the ui shader is stored
 
     u64 geometry_vertex_offset;  // offset to keep track of everytime that we load data into the buffer
     u64 geometry_index_offset;   // offset to keep track of everytime that we load data into the buffer
 
     // TODO: make dynamic
     vulkan_geometry_data geometries[VULKAN_MAX_GEOMETRY_COUNT];
+
+    // framebuffers used for world rendering, one per frame
+    VkFramebuffer world_framebuffers[3];
 
     i32 (*find_memory_index)(u32 type_filter, u32 property_flags);  // a fuction pointer that takes in a type filter and the property flags - returns a 32 bit int
 

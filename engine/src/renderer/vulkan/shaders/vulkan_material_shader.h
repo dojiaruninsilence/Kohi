@@ -13,7 +13,7 @@ void vulkan_material_shader_destroy(vulkan_context* context, struct vulkan_mater
 void vulkan_material_shader_use(vulkan_context* context, struct vulkan_material_shader* shader);
 
 // update the object shaders global state, , pass in a pointer to the context, and a pointer to where the shader struct is held
-void vulkan_material_shader_update_global_state(vulkan_context* context, struct vulkan_material_shader* shader, f32 delta_time);
+void vulkan_material_shader_update_global_world_state(vulkan_context* context, struct vulkan_material_shader* shader, f32 delta_time);
 
 // set the model
 void vulkan_material_shader_set_model(vulkan_context* context, struct vulkan_material_shader* shader, mat4 model);
