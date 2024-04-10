@@ -281,7 +281,7 @@ typedef struct vulkan_ui_shader {
     b8 descriptor_updated[3];
 
     // global uniform object
-    vulkan_material_shader_global_ubo global_ubo;  // store global object stuffs like view, and projection matrices
+    vulkan_ui_shader_global_ubo global_ubo;  // store global object stuffs like view, and projection matrices
 
     // global uniform buffer
     vulkan_buffer global_uniform_buffer;
