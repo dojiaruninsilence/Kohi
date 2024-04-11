@@ -313,9 +313,8 @@ b8 select_physical_device(vulkan_context* context) {
         return false;
     }
 
-    // if we do have devices retrieve those devices
-    const u32 max_device_count = 32;                                                                    // create a variable to represent the maximum number of devices allowed
-    VkPhysicalDevice physical_devices[max_device_count];                                                // create an arrary of physical devices, with the length of the max physical device count
+    // if we do have devices retrieve those devices                                                                  // create a variable to represent the maximum number of devices allowed
+    VkPhysicalDevice physical_devices[32];                                                              // create an arrary of physical devices, with the length of the max physical device count
     VK_CHECK(vkEnumeratePhysicalDevices(context->instance, &physical_device_count, physical_devices));  // this time instaed of getting a list, we fill the list into the physical devices array
     for (u32 i = 0; i < physical_device_count; ++i) {
         // use these to determine if the device meets the criteria that we need

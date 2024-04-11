@@ -135,9 +135,9 @@ void geometry_system_release(geometry* geometry) {
 
         // take a copy of the id
         u32 id = geometry->id;
-        if (ref->geometry.id == geometry->id) {  // if the passed in id and the registered id match
-            if (ref->reference_count > 0) {      // if the ref count is not zero
-                ref->reference_count--;          // decrement it
+        if (ref->geometry.id == id) {        // if the passed in id and the registered id match
+            if (ref->reference_count > 0) {  // if the ref count is not zero
+                ref->reference_count--;      // decrement it
             }
 
             // also blanks out the geometry id

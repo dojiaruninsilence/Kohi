@@ -89,7 +89,7 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
 
     // dynamic state -- pipelines are not changeble, but a few things can change a bit - these can be changed on the fly
     const u32 dynamic_state_count = 3;
-    VkDynamicState dynamic_states[dynamic_state_count] = {
+    VkDynamicState dynamic_states[3] = {
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR,
         VK_DYNAMIC_STATE_LINE_WIDTH};

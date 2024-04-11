@@ -474,7 +474,7 @@ b8 vulkan_renderer_backend_begin_frame(renderer_backend* backend, f32 delta_time
 // update the global state, this will probably control camera movements and such, pass in a view, and projection matrices, the view position, ambient color and the mode
 // none of these are pointers, here we are making copies, so the rest of the engine can keep doing its thing, and mot waiting for this to finish
 void vulkan_renderer_update_global_world_state(mat4 projection, mat4 view, vec3 view_position, vec4 ambient_colour, i32 mode) {
-    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // store a pointer to the current graphics command buffer
+    // vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // store a pointer to the current graphics command buffer
 
     // use the shader
     vulkan_material_shader_use(&context, &context.material_shader);
@@ -491,7 +491,7 @@ void vulkan_renderer_update_global_world_state(mat4 projection, mat4 view, vec3 
 
 // update the global ui state
 void vulkan_renderer_update_global_ui_state(mat4 projection, mat4 view, i32 mode) {
-    vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // store a pointer to the current graphics command buffer
+    // vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];  // store a pointer to the current graphics command buffer
 
     // use the shader
     vulkan_ui_shader_use(&context, &context.ui_shader);

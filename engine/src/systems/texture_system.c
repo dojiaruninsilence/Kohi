@@ -229,7 +229,7 @@ b8 create_default_textures(texture_system_state* state) {
     const u32 tex_dimension = 256;                                  // size the texture will be in width and height
     const u32 channels = 4;                                         // channels
     const u32 pixel_count = tex_dimension * tex_dimension;          // w * h
-    u8 pixels[pixel_count * channels];                              // dimensions * channels
+    u8 pixels[262144];                                              // dimensions * channels
     kset_memory(pixels, 255, sizeof(u8) * pixel_count * channels);  // fill the array with 255 which makes it white
 
     // each pixel
@@ -296,8 +296,8 @@ b8 load_texture(const char* texture_name, texture* t) {
     // check for transparency
     b32 has_transparency = false;
     for (u64 i = 0; i < total_size; i += temp_texture.channel_count) {  // iterate over all of the pixels(count by number of channels)
-        u8 a = resource_data->pixels[i + 3];                                         // copy the a channel of the pixel
-        if (a < 255) {                                              // if the a channel is less than 255 the pixel is at least partially transparent
+        u8 a = resource_data->pixels[i + 3];                            // copy the a channel of the pixel
+        if (a < 255) {                                                  // if the a channel is less than 255 the pixel is at least partially transparent
             has_transparency = true;
             break;
         }

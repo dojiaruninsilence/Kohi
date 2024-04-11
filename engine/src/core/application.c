@@ -336,9 +336,9 @@ b8 application_run() {
     clock_start(&app_state->clock);                   // start the clock for the app state
     clock_update(&app_state->clock);                  // update the clock for the app state - update the elapsed time
     app_state->last_time = app_state->clock.elapsed;  // set last time to the elapsed time
-    f64 running_time = 0;                             // declare with 0 - to keep track of how much time has accumulated
-    u8 frame_count = 0;                               // declare with 0 - to keep track of the frames per second
-    f64 target_frame_seconds = 1.0f / 60;             // target frame rate of 60 frames per second - so this gives us a 60th of a second 1/60s - for places where the frame rate may need to be limited
+    // f64 running_time = 0;                             // declare with 0 - to keep track of how much time has accumulated
+    u8 frame_count = 0;                    // declare with 0 - to keep track of the frames per second
+    f64 target_frame_seconds = 1.0f / 60;  // target frame rate of 60 frames per second - so this gives us a 60th of a second 1/60s - for places where the frame rate may need to be limited
 
     // test of the memory subsystem
     KINFO(get_memory_usage_str())
@@ -391,9 +391,9 @@ b8 application_run() {
             renderer_draw_frame(&packet);  // here is where the draw calls are going to be?
 
             // figure out how long the frame took and, if below
-            f64 frame_end_time = platform_get_absolute_time();                  // get time from os and set to frame end time
-            f64 frame_elapsed_time = frame_end_time - frame_start_time;         // get the elapsed time from the start and end times
-            running_time += frame_elapsed_time;                                 // increment the running time by the frame elapsed time
+            f64 frame_end_time = platform_get_absolute_time();           // get time from os and set to frame end time
+            f64 frame_elapsed_time = frame_end_time - frame_start_time;  // get the elapsed time from the start and end times
+            // running_time += frame_elapsed_time;                                 // increment the running time by the frame elapsed time
             f64 remaining_seconds = target_frame_seconds - frame_elapsed_time;  // take the elapsed time away from one second
 
             if (remaining_seconds > 0) {                        // if there are still ms left
