@@ -43,10 +43,6 @@ typedef struct application_state {
     u64 event_system_memory_requirement;  // where the amount of storage that is needed for the event system is stored
     void* event_system_state;             // a pointer to where the event state is being store
 
-    // memory system state allocation
-    u64 memory_system_memory_requirement;  // where the amount of storage that is needed for the memory system is stored
-    void* memory_system_state;             // a pointer to where the memory state is being store
-
     // logger system state allocation
     u64 logging_system_memory_requirement;  // where the amount of storage that is needed for the logger system is stored
     void* logging_system_state;             // a pointer to where the logger system state is being stored
@@ -131,6 +127,17 @@ b8 application_create(game* game_inst) {
         return false;                                         // boot out
     }
 
+    // memory sytem must be the first thing to be stood up
+    memory_system_configuration memory_system_config = {};
+    memory_system_config.total_alloc_size = GIBIBYTES(1);
+    if (!memory_system_initialize(memory_system_config)) {
+        KERROR("Failed to initialize memory system; shutting down.");
+        return false;
+    }
+
+    // allocate the game state
+    game_inst->state = kallocate(game_inst->state_memory_requirement, MEMORY_TAG_GAME);
+
     // allocate memory for the application state, this will eventually move, and for now will be one of the few dynamica allocations in the code base
     game_inst->application_state = kallocate(sizeof(application_state), MEMORY_TAG_APPLICATION);  // use the size of the application state and tag it with application
     app_state = game_inst->application_state;                                                     // set the app state pointer to the game instance application state
@@ -138,12 +145,12 @@ b8 application_create(game* game_inst) {
     app_state->is_running = false;                                                                // boolean to say the app is running
     app_state->is_suspended = false;                                                              // suspended is a state in which the application shouldnt be updating or anything - will implement later
 
-    // setup the memory allocation to hold the states of the systems
+    // setup the memory allocation to hold the states of the systems except for the memory system
     // set the size for the lineare allocator for the systems' states
     u64 system_allocator_total_size = 64 * 1024 * 1024;                                      // this is 64mb
     linear_allocator_create(system_allocator_total_size, 0, &app_state->systems_allocator);  // create the linear allocator, give it the address to the app states system allocator, it will allocate its own memory, and the total size
 
-    // initialize subsystems for the application here
+    // initialize other subsystems for the application here
 
     // initialize the event subsystem
     //  on the first pass, pass in the pointer to the requirement field to get the size required
@@ -152,14 +159,6 @@ b8 application_create(game* game_inst) {
     app_state->event_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->event_system_memory_requirement);
     // second pass actually initializes the event system, pass it a pointer to the required memory, and a pointer to where the memory is
     event_system_initialize(&app_state->event_system_memory_requirement, app_state->event_system_state);
-
-    // initialize the memory subsystem
-    // first pass pass in the the pointer to the requirement field to get the size required
-    memory_system_initialize(&app_state->memory_system_memory_requirement, 0);
-    // allocate memory from the linear allocator for the state of memory system, and give the pointer to the memory to memory system state
-    app_state->memory_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->memory_system_memory_requirement);
-    // second pass actually initializes the memory system, pass it a pointer to the required memory, and a pointer to where the memory is
-    memory_system_initialize(&app_state->memory_system_memory_requirement, app_state->memory_system_state);
 
     // initialize the logging system
     initilize_logging(&app_state->logging_system_memory_requirement, 0);  // get the memory required to store the state, pass in the requirement field and 0 so it only gets memory requirement
@@ -449,11 +448,11 @@ b8 application_run() {
     // shut down the platform layer -  pass it the pointer to where the state is being stored
     platform_system_shutdown(app_state->platform_system_state);
 
-    // shut down the memory subsystem - pass it the pointer to where the state is being stored
-    memory_system_shutdown(app_state->memory_system_state);
-
     // shutdown the event system, pass in a pointer to the event system state
     event_system_shutdown(app_state->event_system_state);
+
+    // shut down the memory subsystem - pass it the pointer to where the state is being stored
+    memory_system_shutdown();
 
     return true;
 }

@@ -3,6 +3,7 @@
 #include "core/logger.h"
 #include "core/kstring.h"
 #include "platform/platform.h"
+#include "memory/dynamic_allocator.h"
 
 // TODO: custom string library
 #include <string.h>
@@ -36,28 +37,64 @@ static const char* memory_tag_strings[MEMORY_TAG_MAX_TAGS] = {
 
 // where we will store the state information for the memory system
 typedef struct memory_system_state {
-    struct memory_stats stats;  // store the struct for the memory stats
-    u64 alloc_count;            // keep track of the number of dynamic allocations made
+    memory_system_configuration config;  // struct for defining the config setting
+    struct memory_stats stats;           // store the struct for the memory stats
+    u64 alloc_count;                     // keep track of the number of dynamic allocations made
+    u64 allocator_memory_requirement;    // how much memory is needed for allocations
+    dynamic_allocator allocator;         // store a dynamic allocator
+    void* allocator_block;               // pointer to array of blocks of memory?
 } memory_system_state;
 
 // define a pointer to where the memory state is going to be stored -- to privately track it in the memory system
 static memory_system_state* state_ptr;
 
 // initialize the memory subsystem- pass in a pointer to the where memory reuirements for the state will be stored, and a pointer to the where the memory for the state will be, 0 for the first run to get the size requirements
-void memory_system_initialize(u64* memory_requirement, void* state) {
-    *memory_requirement = sizeof(memory_system_state);  // dereference the memory requirement and set it too the size of the memory system state
-    if (state == 0) {                                   // if no state pointer is passed in, just grab the size requirement
-        return;                                         // and boot out
+b8 memory_system_initialize(memory_system_configuration config) {
+    // the amount needed by the system state
+    u64 state_memory_requirement = sizeof(memory_system_state);
+
+    // figure out how much space the dynamic allocator needs
+    u64 alloc_requirement = 0;
+    dynamic_allocator_create(config.total_alloc_size, &alloc_requirement, 0, 0);
+
+    // call the plaform allocator to get the memory for the whole system, including the state
+    // TODO: memory alignment
+    void* block = platform_allocate(state_memory_requirement + alloc_requirement, false);
+    if (!block) {
+        KFATAL("Memory system allocation failed and the system cannot continue.");
+        return false;
     }
 
-    state_ptr = state;                                                  // pass through the pointer to the memory
-    state_ptr->alloc_count = 0;                                         // reset the number of dynamic allocations to 0;
+    // the state is in the first part of the massive block of memory
+    state_ptr = (memory_system_state*)block;
+    state_ptr->config = config;
+    state_ptr->alloc_count = 0;  // reset the number of dynamic allocations to 0;
+    state_ptr->allocator_memory_requirement = alloc_requirement;
     platform_zero_memory(&state_ptr->stats, sizeof(state_ptr->stats));  // starts by zeroing out all of the stats, in case any left over from a previous call
+    // the allocator block is in the same block of memory, but after the state.
+    state_ptr->allocator_block = ((void*)block + state_memory_requirement);
+
+    // actually create the dynamic allocator
+    if (!dynamic_allocator_create(
+            config.total_alloc_size,
+            &state_ptr->allocator_memory_requirement,
+            state_ptr->allocator_block,
+            &state_ptr->allocator)) {
+        KFATAL("Memory system is unable to setup internal allocator. Application cannot continue.");
+        return false;
+    }
+
+    KDEBUG("Memory system successfully allocated %llu bytes.", config.total_alloc_size);
+    return true;
 }
 
 // shutdown the memory subsystem, just pass it the pointer to the state
-void memory_system_shutdown(void* state) {
-    state_ptr = 0;  // just going to reset the state pointer for now
+void memory_system_shutdown() {
+    if (state_ptr) {
+        dynamic_allocator_destroy(&state_ptr->allocator);
+        // free the entire block
+        platform_free(state_ptr, state_ptr->allocator_memory_requirement + sizeof(memory_system_state));
+    }
 }
 
 void* kallocate(u64 size, memory_tag tag) {
@@ -65,17 +102,28 @@ void* kallocate(u64 size, memory_tag tag) {
         KWARN("kallocate called using MEMORY_TAG_UNKNOWN. re-class this allocation.");  // let us know if the tag is unknown, will still be valid but we should know so we can fix it
     }
 
+    // either allocate from the system's allocator or the os. the latter shouldnt ever really happen
+    void* block = 0;
     if (state_ptr) {
         state_ptr->stats.tolal_allocated += size;          // add the size that is passed in to total allocated. size in bytes
         state_ptr->stats.tagged_allocations[tag] += size;  // add size to tagged allocated, using tag to match the proper index - how we track memory per category
         state_ptr->alloc_count++;                          // everytime memory is allocated increment the count of dynamic allocations
+
+        block = dynamic_allocator_allocate(&state_ptr->allocator, size);
+    } else {
+        // if the system is not up yet, warn about it, but give memory for now
+        KWARN("kallocate was called before the memory system was initialized.");
+        // TODO: memory alignment
+        block = platform_allocate(size, false);
     }
 
-    // TODO: memory alignment
-    // create block of memory
-    void* block = platform_allocate(size, false);  // passing in false for memory alignement for now, will come back too. //perform the platform_allocate from platform.h
-    platform_zero_memory(block, size);             // set the newly created block to all zeros
-    return block;
+    if (block) {
+        platform_zero_memory(block, size);
+        return block;
+    }
+
+    KFATAL("kallocate failed to allocate successfully.");
+    return 0;
 }
 
 void kfree(void* block, u64 size, memory_tag tag) {
@@ -86,11 +134,19 @@ void kfree(void* block, u64 size, memory_tag tag) {
     if (state_ptr) {
         state_ptr->stats.tolal_allocated -= size;          // remove the size passed in from total allocated stats
         state_ptr->stats.tagged_allocations[tag] -= size;  // remove the size passed in from tagged allocations at index of tag
-    }
+        b8 result = dynamic_allocator_free(&state_ptr->allocator, block, size);
 
-    // TODO: memory alignment
-    // remove block of memory
-    platform_free(block, false);  // again just hard coding false for the memory alignemt, will come back
+        // if the free failed, its possible this is because the allocation was made before the system had been initialized.
+        // since this should absolutely be an exeption to the rule, try freeing it on the platform level. if this fails,
+        // some other form of skullduggery is affoot, and we have bigger problems on our hands
+        if (!result) {
+            // TODO: memory alignment
+            platform_free(block, false);
+        }
+    } else {
+        // TODO: memory alignment
+        platform_free(block, false);
+    }
 }
 
 // the next three are easy, they just call their platform specific counterparts, passing the same values

@@ -27,12 +27,18 @@ typedef enum memory_tag {  // enum is for enumeration, need to look this up as w
     MEMORY_TAG_MAX_TAGS  // use this to itterate through all the tags - always has to be the last entry in the list
 } memory_tag;
 
+// @brief the configuration for the memory system
+typedef struct memory_system_configuration {
+    // @brief the total memory size in bytes used by the internal allocator for this system
+    u64 total_alloc_size;
+} memory_system_configuration;
+
 // run twice eveytime, first to get the memory required, then second to actually initialize the system
 // initialize the memory subsystem - pass in a pointer to where the memory requirements fiels is, and a pointer to where the state is going to be in memory, or a zero if getting the memory requirement
-KAPI void memory_system_initialize(u64* memory_requirement, void* state);  // all sub systems need initializing
+KAPI b8 memory_system_initialize(memory_system_configuration config);  // all sub systems need initializing
 
 // shut down the memory subsystem
-KAPI void memory_system_shutdown(void* state);  // and a shutdown
+KAPI void memory_system_shutdown();  // and a shutdown
 
 KAPI void* kallocate(u64 size, memory_tag tag);  // almost like a malloc - but takes in a memory_tag - and allows the engine and us to keep track
 

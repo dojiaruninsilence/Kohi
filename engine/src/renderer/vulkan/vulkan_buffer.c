@@ -123,6 +123,10 @@ b8 vulkan_buffer_resize(
         &allocate_info,                  // info from above
         context->allocator,              // the memory allocation infos
         &new_memory);                    // and an address to the memory being allocated
+    if (result != VK_SUCCESS) {
+        KERROR("Unable to resize vulkan buffer because the required memory allocation failed. Error: %i", result);
+        return false;
+    }
 
     // bind the new buffer's memory - pass it the logical device, the new buffer, new memory, and a zero offset
     VK_CHECK(vkBindBufferMemory(context->device.logical_device, new_buffer, new_memory, 0));
