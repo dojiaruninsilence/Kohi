@@ -15,7 +15,7 @@ typedef struct freelist {
 // @param memory_requirement a pointer to hold memory requirement for the free list itself
 // @param memory 0, or a pre-allocated block of memory for the free list to use
 // @param out_list a pointer to hold the created free list
-KAPI void freelist_create(u32 total_size, u64* memory_requirement, void* memory, freelist* out_list);
+KAPI void freelist_create(u64 total_size, u64* memory_requirement, void* memory, freelist* out_list);
 
 // @brief destroys the provided list
 // @param list the list to be destroyed
@@ -26,14 +26,14 @@ KAPI void freelist_destroy(freelist* list);
 // @param size the size to allocate
 // @param out_offset a pointer to hold the offset to the allocated memory
 // @return b8 true if a block of memory was found and allocated; otherwise false
-KAPI b8 freelist_allocate_block(freelist* list, u32 size, u32* out_offset);
+KAPI b8 freelist_allocate_block(freelist* list, u64 size, u64* out_offset);
 
 // @brief attempts to free a block of memory at the given offset, and of the given size. can faile if invalid data is passed.
 // @param list a pointer to the list to be free from
 // @param size the size to be freed
 // @param offset the offset to free at
 // @return b8 true if successful; otherwise false. false should be treated as an error
-KAPI b8 freelist_free_block(freelist* list, u32 size, u32 offset);
+KAPI b8 freelist_free_block(freelist* list, u64 size, u64 offset);
 
 // @brief clears the free list
 // @param list the list to be cleared

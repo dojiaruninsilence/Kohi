@@ -5,15 +5,15 @@
 
 // info that is kept for each node
 typedef struct freelist_node {
-    u32 offset;                  // how far from the first node
-    u32 size;                    // stride
+    u64 offset;                  // how far from the first node
+    u64 size;                    // stride
     struct freelist_node* next;  // pointer to the node next in the free list
 } freelist_node;
 
 // where the internal state of a freelist is kept
 typedef struct internal_state {
-    u32 total_size;        // total memory the free list is covering
-    u32 max_entries;       // max entries into the freelist
+    u64 total_size;        // total memory the free list is covering
+    u64 max_entries;       // max entries into the freelist
     freelist_node* head;   // pointer to where the head of the list is - the very first node
     freelist_node* nodes;  // an array of nodes in the free list
 } internal_state;
@@ -28,9 +28,9 @@ void return_node(freelist* list, freelist_node* node);
 // @param memory_requirement a pointer to hold memory requirement for the free list itself
 // @param memory 0, or a pre-allocated block of memory for the free list to use
 // @param out_list a pointer to hold the created free list
-void freelist_create(u32 total_size, u64* memory_requirement, void* memory, freelist* out_list) {
+void freelist_create(u64 total_size, u64* memory_requirement, void* memory, freelist* out_list) {
     // enough space to hold the state, plus an array for all the nodes
-    u32 max_entries = (total_size / sizeof(void*));  // NOTE: this may have a remainder, but that is ok
+    u64 max_entries = (total_size / sizeof(void*));  // NOTE: this may have a remainder, but that is ok
     *memory_requirement = sizeof(internal_state) + (sizeof(freelist_node) * max_entries);
     if (!memory) {
         return;
@@ -61,7 +61,7 @@ void freelist_create(u32 total_size, u64* memory_requirement, void* memory, free
     state->head->next = 0;
 
     // invalidate the offset and size for all but the first node. the invalid value will be checked for when seeking a new node from the list
-    for (u32 i = 1; i < state->max_entries; ++i) {  // start at one cause zero is the head
+    for (u64 i = 1; i < state->max_entries; ++i) {  // start at one cause zero is the head
         state->nodes[i].offset = INVALID_ID;
         state->nodes[i].size = INVALID_ID;
     }
@@ -83,7 +83,7 @@ void freelist_destroy(freelist* list) {
 // @param size the size to allocate
 // @param out_offset a pointer to hold the offset to the allocated memory
 // @return b8 true if a block of memory was found and allocated; otherwise false
-b8 freelist_allocate_block(freelist* list, u32 size, u32* out_offset) {
+b8 freelist_allocate_block(freelist* list, u64 size, u64* out_offset) {
     if (!list || !out_offset || !list->memory) {
         return false;
     }
@@ -120,7 +120,7 @@ b8 freelist_allocate_block(freelist* list, u32 size, u32* out_offset) {
     }
 
     u64 free_space = freelist_free_space(list);
-    KWARN("freelist_find_block, no block with enough free space found (requested: %uB, available: %lluB).", size, free_space);
+    KWARN("freelist_find_block, no block with enough free space found (requested: %lluB, available: %lluB).", size, free_space);
     return false;
 }
 
@@ -129,63 +129,73 @@ b8 freelist_allocate_block(freelist* list, u32 size, u32* out_offset) {
 // @param size the size to be freed
 // @param offset the offset to free at
 // @return b8 true if successful; otherwise false. false should be treated as an error
-b8 freelist_free_block(freelist* list, u32 size, u32 offset) {
+b8 freelist_free_block(freelist* list, u64 size, u64 offset) {
     if (!list || !list->memory || !size) {
         return false;
     }
     internal_state* state = list->memory;
     freelist_node* node = state->head;
     freelist_node* previous = 0;
-    while (node) {
-        if (node->offset == offset) {
-            // can just be appended to this node
-            node->size += size;
+    if (!node) {
+        // check for the case where the entire thing is allocated in one block, in this case a new node is needed at the head
+        freelist_node* new_node = get_node(list);
+        new_node->offset = offset;
+        new_node->size = size;
+        new_node->next = 0;
+        state->head = new_node;
+        return true;
+    } else {
+        while (node) {
+            if (node->offset == offset) {
+                // can just be appended to this node
+                node->size += size;
 
-            // check if this then connects the range between this and the next node, and if so, combine them and return the second node..
-            if (node->next && node->next->offset == node->offset + node->size) {
-                node->size += node->next->size;
-                freelist_node* next = node->next;
-                node->next = node->next->next;
-                return_node(list, next);
+                // check if this then connects the range between this and the next node, and if so, combine them and return the second node..
+                if (node->next && node->next->offset == node->offset + node->size) {
+                    node->size += node->next->size;
+                    freelist_node* next = node->next;
+                    node->next = node->next->next;
+                    return_node(list, next);
+                }
+                return true;
+            } else if (node->offset > offset) {
+                // iterated beyond the space to be freed. need a new node
+                freelist_node* new_node = get_node(list);
+                new_node->offset = offset;
+                new_node->size = size;
+
+                // if there is a previous node, the new node should be inserted between this and it
+                if (previous) {
+                    previous->next = new_node;
+                    new_node->next = node;
+                } else {
+                    // otherwise, the new mode becomes the head
+                    new_node->next = node;
+                    state->head = new_node;
+                }
+
+                // double check the next node to see if it can be joined
+                if (new_node->next && new_node->offset + new_node->size == new_node->next->offset) {
+                    new_node->size += new_node->next->size;
+                    freelist_node* rubbish = new_node->next;
+                    new_node->next = rubbish->next;
+                    return_node(list, rubbish);
+                }
+
+                // double check the previous node to see if the new node can be joined to it
+                if (previous && previous->offset + previous->size == new_node->offset) {
+                    previous->size += new_node->size;
+                    freelist_node* rubbish = new_node;
+                    previous->next = rubbish->next;
+                    return_node(list, rubbish);
+                }
+
+                return true;
             }
-            return true;
-        } else if (node->offset > offset) {
-            // iterated beyond the space to be freed. need a new node
-            freelist_node* new_node = get_node(list);
-            new_node->offset = offset;
-            new_node->size = size;
 
-            // if there is a previous node, the new node should be inserted between this and it
-            if (previous) {
-                previous->next = new_node;
-                new_node->next = node;
-            } else {
-                // otherwise, the new mode becomes the head
-                new_node->next = node;
-                state->head = new_node;
-            }
-
-            // double check the next node to see if it can be joined
-            if (new_node->next && new_node->offset + new_node->size == new_node->next->offset) {
-                new_node->size += new_node->next->size;
-                freelist_node* rubbish = new_node->next;
-                new_node->next = rubbish->next;
-                return_node(list, rubbish);
-            }
-
-            // double check the previous node to see if the new node can be joined to it
-            if (previous && previous->offset + previous->size == new_node->offset) {
-                previous->size += new_node->size;
-                freelist_node* rubbish = new_node;
-                previous->next = rubbish->next;
-                return_node(list, rubbish);
-            }
-
-            return true;
+            previous = node;
+            node = node->next;
         }
-
-        previous = node;
-        node = node->next;
     }
 
     KWARN("Unable to find block to be freed. Corruption possible?");
@@ -201,7 +211,7 @@ void freelist_clear(freelist* list) {
 
     internal_state* state = list->memory;
     // invalidate the offset and size for all but the first node.  the invalid value will be checked for when seeking a new node from the list
-    for (u32 i = 1; i < state->max_entries; ++i) {
+    for (u64 i = 1; i < state->max_entries; ++i) {
         state->nodes[i].offset = INVALID_ID;
         state->nodes[i].size = INVALID_ID;
     }
@@ -234,7 +244,7 @@ u64 freelist_free_space(freelist* list) {
 
 freelist_node* get_node(freelist* list) {
     internal_state* state = list->memory;
-    for (u32 i = 1; i < state->max_entries; ++i) {
+    for (u64 i = 1; i < state->max_entries; ++i) {
         if (state->nodes[i].offset == INVALID_ID) {
             return &state->nodes[i];
         }
