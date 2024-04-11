@@ -31,6 +31,21 @@ void vulkan_buffer_bind(vulkan_context* context, vulkan_buffer* buffer, u64 offs
 void* vulkan_buffer_lock_memory(vulkan_context* context, vulkan_buffer* buffer, u64 offset, u64 size, u32 flags);
 void vulkan_buffer_unlock_memory(vulkan_context* context, vulkan_buffer* buffer);
 
+// @brief allocates space from a vulkan buffer. provides the offset at which the allocation occured.
+// this will be required for data copying and freeing
+// @param buffer buffer a pointer to the buffer form which to allocate
+// @param size the size in bytes to be allocated
+// @param out_offset a pointer to hold the offset in bytes from the beginning of the buffer.
+// @return true on success; otherwise false
+b8 vulkan_buffer_allocate(vulkan_buffer* buffer, u64 size, u64* out_offset);
+
+// @brief frees space in the vulkan buffer
+// @param buffer a pointer to the buffer to free data from
+// @param size the size in bytes to be freed
+// @param offset the offset in bytes from the beginning of the buffer
+// @return true on success, other wise false
+b8 vulkan_buffer_free(vulkan_buffer* buffer, u64 size, u64 offset);
+
 // load data into a vulkan buffer -- pass in a pointers to the context and the buffer to
 // load data into, pass in the offset, the size, and the flags. then the data to load
 void vulkan_buffer_load_data(vulkan_context* context, vulkan_buffer* buffer, u64 offset, u64 size, u32 flags, const void* data);

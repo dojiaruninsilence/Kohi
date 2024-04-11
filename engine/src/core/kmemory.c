@@ -42,7 +42,7 @@ typedef struct memory_system_state {
     u64 alloc_count;                     // keep track of the number of dynamic allocations made
     u64 allocator_memory_requirement;    // how much memory is needed for allocations
     dynamic_allocator allocator;         // store a dynamic allocator
-    void* allocator_block;               // pointer to array of blocks of memory?
+    void* allocator_block;               // pointer to actual block of memory in the allocator
 } memory_system_state;
 
 // define a pointer to where the memory state is going to be stored -- to privately track it in the memory system

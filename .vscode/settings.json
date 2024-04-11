@@ -69,6 +69,11 @@
         "stb_image.h": "c",
         "vector": "c",
         "xstring": "c",
-        "xutility": "c"
+        "xutility": "c",
+        "iterator": "c",
+        "initializer_list": "c",
+        "loader_utils.h": "c",
+        "kmath.h": "c",
+        "random": "c"
     }
 }

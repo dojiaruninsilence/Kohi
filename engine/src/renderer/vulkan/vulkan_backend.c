@@ -50,7 +50,13 @@ void regenerate_framebuffers();                          // private function to 
 b8 recreate_swapchain(renderer_backend* backend);        // private function to recreate the swapchain, just takes in a pointer to the backend
 
 // temporary funtion to test if everything is working correctly
-void upload_data_range(vulkan_context* context, VkCommandPool pool, VkFence fence, VkQueue queue, vulkan_buffer* buffer, u64 offset, u64 size, const void* data) {
+b8 upload_data_range(vulkan_context* context, VkCommandPool pool, VkFence fence, VkQueue queue, vulkan_buffer* buffer, u64* out_offset, u64 size, const void* data) {
+    // allocate space in the buffer.
+    if (!vulkan_buffer_allocate(buffer, size, out_offset)) {
+        KERROR("upload_data_range failed to allocate from the given buffer!");
+        return false;
+    }
+
     // Create a host-visible staging buffer to upload to. Mark it as the source of the transfer.
     VkBufferUsageFlags flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
     vulkan_buffer staging;
@@ -60,15 +66,18 @@ void upload_data_range(vulkan_context* context, VkCommandPool pool, VkFence fenc
     vulkan_buffer_load_data(context, &staging, 0, size, 0, data);
 
     // Perform the copy from staging to the device local buffer.
-    vulkan_buffer_copy_to(context, pool, fence, queue, staging.handle, 0, buffer->handle, offset, size);
+    vulkan_buffer_copy_to(context, pool, fence, queue, staging.handle, 0, buffer->handle, *out_offset, size);
 
     // Clean up the staging buffer.
     vulkan_buffer_destroy(context, &staging);
+
+    return true;
 }
 
 void free_data_range(vulkan_buffer* buffer, u64 offset, u64 size) {
-    // TODO: free this in the buffer
-    // TODO: update the free list with this range being freed
+    if (buffer) {
+        vulkan_buffer_free(buffer, size, offset);
+    }
 }
 
 b8 vulkan_renderer_backend_initialize(renderer_backend* backend, const char* application_name) {
@@ -833,7 +842,6 @@ b8 create_buffers(vulkan_context* context) {
         KERROR("Error creating vertex buffer.");
         return false;
     }
-    context->geometry_index_offset = 0;
 
     // geometry index buffer
     // set the index buffer size,
@@ -848,7 +856,6 @@ b8 create_buffers(vulkan_context* context) {
         KERROR("Error creating index buffer.");
         return false;
     }
-    context->geometry_index_offset = 0;
 
     return true;
 }
@@ -1064,39 +1071,39 @@ b8 vulkan_renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vert
     VkQueue queue = context.device.graphics_queue;
 
     // vertex data
-    internal_data->vertex_buffer_offset = context.geometry_vertex_offset;
     internal_data->vertex_count = vertex_count;
     internal_data->vertex_element_size = sizeof(vertex_3d);
     u32 total_size = vertex_count * vertex_size;
-    upload_data_range(
-        &context,
-        pool,
-        0,
-        queue,
-        &context.object_vertex_buffer,
-        internal_data->vertex_buffer_offset,
-        total_size,
-        vertices);
-    // TODO: should maintain a free list instead of this
-    context.geometry_vertex_offset += total_size;
-
-    // index data, if applicable
-    if (index_count && indices) {
-        internal_data->index_buffer_offset = context.geometry_index_offset;
-        internal_data->index_count = index_count;
-        internal_data->index_element_size = sizeof(u32);
-        total_size = index_count * index_size;
-        upload_data_range(
+    if (!upload_data_range(
             &context,
             pool,
             0,
             queue,
-            &context.object_index_buffer,
-            internal_data->index_buffer_offset,
+            &context.object_vertex_buffer,
+            &internal_data->vertex_buffer_offset,
             total_size,
-            indices);
-        // TODO: should maintain a free list instead of this
-        context.geometry_index_offset += total_size;
+            vertices)) {
+        KERROR("vulkan_renderer_create_geometry failed to upload to the vertex buffer!");
+        return false;
+    }
+
+    // index data, if applicable
+    if (index_count && indices) {
+        internal_data->index_count = index_count;
+        internal_data->index_element_size = sizeof(u32);
+        total_size = index_count * index_size;
+        if (!upload_data_range(
+                &context,
+                pool,
+                0,
+                queue,
+                &context.object_index_buffer,
+                &internal_data->index_buffer_offset,
+                total_size,
+                indices)) {
+            KERROR("vulkan_renderer_create_geometry failed to upload to the index buffer!");
+            return false;
+        }
     }
 
     if (internal_data->generation == INVALID_ID) {

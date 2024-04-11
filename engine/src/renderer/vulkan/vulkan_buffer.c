@@ -6,6 +6,14 @@
 
 #include "core/logger.h"
 #include "core/kmemory.h"
+#include "containers/freelist.h"
+
+void cleanup_freelist(vulkan_buffer* buffer) {
+    freelist_destroy(&buffer->buffer_freelist);
+    kfree(buffer->freelist_block, buffer->freelist_memormy_requirement, MEMORY_TAG_RENDERER);
+    buffer->freelist_memormy_requirement = 0;
+    buffer->freelist_block = 0;
+}
 
 // create a vulkan buffer, pass in a pointer to the context, the size the buffer is going to need, what its usage is,
 // and the type of memory needed, bool for bind on creation, and a pointer to where the resulting buffer will be held
@@ -21,6 +29,12 @@ b8 vulkan_buffer_create(
     out_buffer->total_size = size;
     out_buffer->usage = usage;
     out_buffer->memory_property_flags = memory_property_flags;
+
+    // create a new free list
+    out_buffer->freelist_memormy_requirement = 0;
+    freelist_create(size, &out_buffer->freelist_memormy_requirement, 0, 0);
+    out_buffer->freelist_block = kallocate(out_buffer->freelist_memormy_requirement, MEMORY_TAG_RENDERER);
+    freelist_create(size, &out_buffer->freelist_memormy_requirement, out_buffer->freelist_block, &out_buffer->buffer_freelist);
 
     // create the vulkan struct for creating a buffer, use the macro to format and fill with default values
     VkBufferCreateInfo buffer_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
@@ -39,7 +53,10 @@ b8 vulkan_buffer_create(
     out_buffer->memory_index = context->find_memory_index(requirements.memoryTypeBits, out_buffer->memory_property_flags);  // get the memory index from the info provided above and the find memory index method
     if (out_buffer->memory_index == -1) {                                                                                   // if there is nothing in the memory index
         KERROR("Unable to create vulkan buffer because the required memory type index was not found.");                     // throw an error
-        return false;                                                                                                       // boot out
+
+        // make sure to destroy the freelist
+        cleanup_freelist(out_buffer);
+        return false;  // boot out
     }
 
     // allocate memory info
@@ -58,7 +75,10 @@ b8 vulkan_buffer_create(
     // check the results
     if (result != VK_SUCCESS) {                                                                                     // if fail
         KERROR("Unable to create vulkan buffer because the required memory allocation failed. Error: %i", result);  // throw error
-        return false;                                                                                               // boot out
+
+        // make sure to destroy the freelist
+        cleanup_freelist(out_buffer);
+        return false;  // boot out
     }
 
     // if it passed
@@ -71,6 +91,10 @@ b8 vulkan_buffer_create(
 
 // destroy a vulkan buffer, just pass in the context and the buffer to destroy
 void vulkan_buffer_destroy(vulkan_context* context, vulkan_buffer* buffer) {
+    if (buffer->freelist_block) {
+        // make sure to destroy the freelist
+        cleanup_freelist(buffer);
+    }
     if (buffer->memory) {                                                                  // if there is memory to free
         vkFreeMemory(context->device.logical_device, buffer->memory, context->allocator);  // use vulkan function to free it
         buffer->memory = 0;                                                                // and reset memory
@@ -93,6 +117,28 @@ b8 vulkan_buffer_resize(
     vulkan_buffer* buffer,
     VkQueue queue,
     VkCommandPool pool) {
+    // sanity check
+    if (new_size < buffer->total_size) {
+        KERROR("vulkan_buffer_resize requires that the new size be larger than the old.  Not doing this could lead to data loss.");
+        return false;
+    }
+
+    // resize the freelist first
+    u64 new_memory_requirement = 0;
+    freelist_resize(&buffer->buffer_freelist, &new_memory_requirement, 0, 0, 0);
+    void* new_block = kallocate(new_memory_requirement, MEMORY_TAG_RENDERER);
+    void* old_block = 0;
+    if (!freelist_resize(&buffer->buffer_freelist, &new_memory_requirement, new_block, new_size, &old_block)) {
+        KERROR("vulkan_buffer_resize failed to resize internal freelist.");
+        kfree(new_block, new_memory_requirement, MEMORY_TAG_RENDERER);
+        return false;
+    }
+    // clean up the old memory, then assign the new properties over
+    kfree(old_block, buffer->freelist_memormy_requirement, MEMORY_TAG_RENDERER);
+    buffer->freelist_memormy_requirement = new_memory_requirement;
+    buffer->freelist_block = new_block;
+    buffer->total_size = new_size;
+
     // create a new buffer
     // create the vulkan struct for creating a buffer, use the macro to format and fill with default values
     VkBufferCreateInfo buffer_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
@@ -168,8 +214,27 @@ void* vulkan_buffer_lock_memory(vulkan_context* context, vulkan_buffer* buffer, 
     VK_CHECK(vkMapMemory(context->device.logical_device, buffer->memory, offset, size, flags, &data));
     return data;
 }
+
 void vulkan_buffer_unlock_memory(vulkan_context* context, vulkan_buffer* buffer) {
     vkUnmapMemory(context->device.logical_device, buffer->memory);
+}
+
+b8 vulkan_buffer_allocate(vulkan_buffer* buffer, u64 size, u64* out_offset) {
+    if (!buffer || !size || !out_offset) {
+        KERROR("vulkan_buffer_allocate requires valid buffer, a nonzero size and valid pointer to hold offset.");
+        return false;
+    }
+
+    return freelist_allocate_block(&buffer->buffer_freelist, size, out_offset);
+}
+
+b8 vulkan_buffer_free(vulkan_buffer* buffer, u64 size, u64 offset) {
+    if (!buffer || !size || !offset) {
+        KERROR("vulkan_buffer_allocate requires valid buffer, a nonzero size and a nonzero offset.");
+        return false;
+    }
+
+    return freelist_free_block(&buffer->buffer_freelist, size, offset);
 }
 
 // load data into a vulkan buffer -- pass in a pointers to the context and the buffer to

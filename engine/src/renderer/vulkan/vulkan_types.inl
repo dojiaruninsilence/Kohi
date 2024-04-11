@@ -3,6 +3,7 @@
 #include "defines.h"
 #include "core/asserts.h"
 #include "renderer/renderer_types.inl"
+#include "containers/freelist.h"
 
 #include <vulkan/vulkan.h>
 
@@ -21,6 +22,12 @@ typedef struct vulkan_buffer {
     VkDeviceMemory memory;        // allocate and hold on to device memory
     i32 memory_index;             // where the memory is currently at
     u32 memory_property_flags;    // and the type of memory
+    // @brief the amount of memory required for the freelist
+    u64 freelist_memormy_requirement;
+    // @brief the memory block used by internal free list
+    void* freelist_block;
+    // @brief a freelist to track allocations
+    freelist buffer_freelist;
 } vulkan_buffer;
 
 // where we are storing the swapchain support info
@@ -169,10 +176,10 @@ typedef struct vulkan_geometry_data {
     u32 generation;            // keep track here too
     u32 vertex_count;          // total number of vertices in the geometry
     u32 vertex_element_size;   // size of each vertex times the count, size in bytes
-    u32 vertex_buffer_offset;  // how far into the geometry buffer from the beginning
+    u64 vertex_buffer_offset;  // how far into the geometry buffer from the beginning
     u32 index_count;           // same but for indices
     u32 index_element_size;
-    u32 index_buffer_offset;
+    u64 index_buffer_offset;
 } vulkan_geometry_data;
 
 // nvidia has a deal where these have to be 256 bytes perfectly, so its set up like this
@@ -364,9 +371,6 @@ typedef struct vulkan_context {
 
     vulkan_material_shader material_shader;  // where we store the object shader infos
     vulkan_ui_shader ui_shader;              // where the ui shader is stored
-
-    u64 geometry_vertex_offset;  // offset to keep track of everytime that we load data into the buffer
-    u64 geometry_index_offset;   // offset to keep track of everytime that we load data into the buffer
 
     // TODO: make dynamic
     vulkan_geometry_data geometries[VULKAN_MAX_GEOMETRY_COUNT];
