@@ -485,9 +485,17 @@ b8 physical_device_meets_requirements(
         u8 current_transfer_score = 0;  // will be used to determine which queue will be used
 
         // does it have a graphics queue?
-        if (queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        if (out_queue_info->graphics_family_index == -1 && queue_families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
             out_queue_info->graphics_family_index = i;  // graphics family index set to i
             ++current_transfer_score;                   // increment the transfer score
+
+            // if also a present queue, this prioritizes grouping of the 2
+            VkBool32 supports_present = VK_FALSE;
+            VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &supports_present));
+            if (supports_present) {
+                out_queue_info->present_family_index = i;
+                ++current_transfer_score;
+            }
         }
 
         // does it have a compute queue?
@@ -504,12 +512,24 @@ b8 physical_device_meets_requirements(
                 out_queue_info->transfer_family_index = i;       // transfer family index set to i
             }
         }
+    }
 
-        // does it have a presentation queue
-        VkBool32 supports_present = VK_FALSE;
-        VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &supports_present));
-        if (supports_present) {
-            out_queue_info->present_family_index = i;
+    // if a present queue hasnt been found, iterate again and take the first one.
+    // this should only happen if there is a queue that supports graphics but not present
+    if (out_queue_info->present_family_index == -1) {
+        for (u32 i = 0; i < queue_family_count; ++i) {
+            // does it have a presentation queue
+            VkBool32 supports_present = VK_FALSE;
+            VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &supports_present));
+            if (supports_present) {
+                out_queue_info->present_family_index = i;
+
+                // if they differ, bleat about it and move on, this is jsut here for troubleshooting purposes
+                if (out_queue_info->present_family_index != out_queue_info->graphics_family_index) {
+                    KWARN("Warning: Different queue index used for present vs graphics: %u.", i);
+                }
+                break;
+            }
         }
     }
 

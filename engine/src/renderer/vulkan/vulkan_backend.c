@@ -473,9 +473,13 @@ b8 vulkan_renderer_backend_begin_frame(renderer_backend* backend, f32 delta_time
     vkCmdSetViewport(command_buffer->handle, 0, 1, &viewport);  // call a vulkan function to set the viewport, pass it a handle to the command buffer for the current frame, vieport index is zero, one viewport, and address to the viewport we setup
     vkCmdSetScissor(command_buffer->handle, 0, 1, &scissor);    // call a vulkan function to clip everything that is outside of the viewport, pass it the handle to the current framebuffer, viewport index is zero, one viewport, and the scissor rect created above
 
-    // set the width and height of the main renderpass by passing in values from the framebuffer -- may be uneccassary to do every frame
+    // set the width and height of the main/world renderpass by passing in values from the framebuffer -- may be uneccassary to do every frame
     context.main_renderpass.render_area.z = context.framebuffer_width;
     context.main_renderpass.render_area.w = context.framebuffer_height;
+
+    // also update the ui renderpass dimensions
+    context.ui_renderpass.render_area.z = context.framebuffer_width;
+    context.ui_renderpass.render_area.w = context.framebuffer_height;
 
     return true;
 }
@@ -523,7 +527,7 @@ b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) 
 
     // make sure the previous frame is not using this image (i.e. its fence is being waited on)
     if (context.images_in_flight[context.image_index] != VK_NULL_HANDLE) {  // if there is acctually in images in flight at image index
-        VkResult result = vkWaitForFences(context.device.logical_device, 1, context.images_in_flight[context.image_index], true, UINT64_MAX);
+        VkResult result = vkWaitForFences(context.device.logical_device, 1, &context.images_in_flight[context.image_index], true, UINT64_MAX);
         if (!vulkan_result_is_success(result)) {
             KERROR("vk_fence_wait error: %s", vulkan_result_string(result, true));
             return false;
@@ -531,7 +535,7 @@ b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) 
     }
 
     // mark the image fence as in use by this frame
-    context.images_in_flight[context.image_index] = &context.in_flight_fences[context.current_frame];  // assign the current inflight fence to the image in flight at image index
+    context.images_in_flight[context.image_index] = context.in_flight_fences[context.current_frame];  // assign the current inflight fence to the image in flight at image index
 
     // reset the fence for use on the next frame
     VK_CHECK(vkResetFences(context.device.logical_device, 1, &context.in_flight_fences[context.current_frame]));  // use vk function to reset a fence, pass in the address to the context, the address to the in flight fence of the current frame
@@ -808,11 +812,17 @@ b8 recreate_swapchain(renderer_backend* backend) {  // private function to recre
         vkDestroyFramebuffer(context.device.logical_device, context.swapchain.framebuffers[i], context.allocator);  // use our function to destroy a framebuffer, pass in an address to the context, and the address to the frambuffer at index i, the one being destroyed
     }
 
-    // copy over a new render area - set the x and y to 0, and get the size from the framebuffer
+    // update the main/world renderpass dimensions
     context.main_renderpass.render_area.x = 0;
     context.main_renderpass.render_area.y = 0;
     context.main_renderpass.render_area.z = context.framebuffer_width;
     context.main_renderpass.render_area.w = context.framebuffer_height;
+
+    // also update the ui renderpass dimensions
+    context.ui_renderpass.render_area.x = 0;
+    context.ui_renderpass.render_area.y = 0;
+    context.ui_renderpass.render_area.z = context.framebuffer_width;
+    context.ui_renderpass.render_area.w = context.framebuffer_height;
 
     // re create the world framebuffers and the swapchain
     regenerate_framebuffers();  // call our regen framebuffers function, pass it the backend, an address to the swapchain, and an address to the main renderpass

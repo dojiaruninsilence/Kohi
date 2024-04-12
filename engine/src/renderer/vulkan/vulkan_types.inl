@@ -362,7 +362,7 @@ typedef struct vulkan_context {
     VkFence in_flight_fences[2];  // the array of fences in flight
 
     // holds pointers to fences which exist and are owned elsewhere, one per frame
-    VkFence* images_in_flight[3];  // possibly they are in in flight fences at the moment, keeps track of them
+    VkFence images_in_flight[3];  // possibly they are in in flight fences at the moment, keeps track of them
 
     u32 image_index;    // to keep track of images in the swap chain - index of the image that we are currently using
     u32 current_frame;  // keep track of the frames
