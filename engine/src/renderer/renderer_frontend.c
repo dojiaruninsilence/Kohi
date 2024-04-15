@@ -7,8 +7,10 @@
 #include "math/kmath.h"
 
 #include "resources/resource_types.h"
+#include "systems/resource_system.h"
 #include "systems/texture_system.h"
 #include "systems/material_system.h"
+#include "systems/shader_system.h"
 
 // TODO: temporary
 #include "core/kstring.h"
@@ -24,10 +26,18 @@ typedef struct renderer_system_state {
     mat4 ui_view;              // store a calculated view matrix for the ui
     f32 near_clip;             // hang on to the near_clip value
     f32 far_clip;              // hang on to the far_clip value
+    u32 material_shader_id;
+    u32 ui_shader_id;
 } renderer_system_state;
 
 // hold a pointer to the renderer systen state internally
 static renderer_system_state* state_ptr;
+
+#define CRITICAL_INIT(op, msg) \
+    if (!op) {                 \
+        KERROR(msg);           \
+        return false;          \
+    }
 
 // initialize the renderer subsystem, - always call twice - on first pass pass in the memory requirement to get the memory required, and zero for the state
 // on the second pass - pass in the state as well as the memory rewuirement and actually initialize the subsystem, also pass in a pointer to the application name
@@ -42,10 +52,30 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     renderer_backend_create(RENDERER_BACKEND_TYPE_VULKAN, &state_ptr->backend);  // create the renderer back end, hard coded to vulcan for now and an address to the backend created above
     state_ptr->backend.frame_number = 0;                                         // zero out the frame number
 
-    if (!state_ptr->backend.initialize(&state_ptr->backend, application_name)) {  // call the backend initialize - one of the fuction pointers in renderer types
-        KFATAL("Renderer backend failed to initialize. Shutting sown.");          // if it fails log a fatal error
-        return false;                                                             // and shut down the renderer initialize - boot out
-    }
+    // initialize the backend
+    CRITICAL_INIT(state_ptr->backend.initialize(&state_ptr->backend, application_name), "Renderer backend failed to initialize. Shutting down.");
+
+    // shaders
+    resource config_resource;
+    shader_config* config = 0;
+
+    // builtin material shader
+    CRITICAL_INIT(
+        resource_system_load(BUILTIN_SHADER_NAME_MATERIAL, RESOURCE_TYPE_SHADER, &config_resource),
+        "Failed to load builtin material shader.");
+    config = (shader_config*)config_resource.data;
+    CRITICAL_INIT(shader_system_create(config), "Failed to load builtin material shader.");
+    resource_system_unload(&config_resource);
+    state_ptr->material_shader_id = shader_system_get_id(BUILTIN_SHADER_NAME_MATERIAL);
+
+    // builtin ui shader
+    CRITICAL_INIT(
+        resource_system_load(BUILTIN_SHADER_NAME_UI, RESOURCE_TYPE_SHADER, &config_resource),
+        "Failed to load builtin UI shader.");
+    config = (shader_config*)config_resource.data;
+    CRITICAL_INIT(shader_system_create(config), "Failed to load builtin UI shader.");
+    resource_system_unload(&config_resource);
+    state_ptr->ui_shader_id = shader_system_get_id(BUILTIN_SHADER_NAME_UI);
 
     // world projection and view
     // define the near and far clip
@@ -95,12 +125,37 @@ b8 renderer_draw_frame(render_packet* packet) {
             return false;
         }
 
-        // update the global state - just passing in default like values for now, to test it - the projection is being calculated now, and view matrix has default values as well
-        state_ptr->backend.update_global_world_state(state_ptr->projection, state_ptr->view, vec3_zero(), vec4_one(), 0);
+        if (!shader_system_use_by_id(state_ptr->material_shader_id)) {
+            KERROR("Failed to use material shader. Render frame failed.");
+            return false;
+        }
+
+        // apply globals
+        if (!material_system_apply_global(state_ptr->material_shader_id, &state_ptr->projection, &state_ptr->view)) {
+            KERROR("Failed to use apply globals for material shader. Render frame failed.");
+            return false;
+        }
 
         // draw geometries.
         u32 count = packet->geometry_count;
         for (u32 i = 0; i < count; ++i) {
+            material* m = 0;
+            if (packet->geometries[i].geometry->material) {
+                m = packet->geometries[i].geometry->material;
+            } else {
+                m = material_system_get_default();
+            }
+
+            // apply the material
+            if (!material_system_apply_instance(m)) {
+                KWARN("Failed to apply material '%s'. Skipping draw.", m->name);
+                continue;
+            }
+
+            // apply the locals
+            material_system_apply_local(m, &packet->geometries[i].model);
+
+            // draw it
             state_ptr->backend.draw_geometry(packet->geometries[i]);
         }
 
@@ -116,12 +171,36 @@ b8 renderer_draw_frame(render_packet* packet) {
             return false;
         }
 
-        // update the ui global state
-        state_ptr->backend.update_global_ui_state(state_ptr->ui_projection, state_ptr->ui_view, 0);
+        if (!shader_system_use_by_id(state_ptr->ui_shader_id)) {
+            KERROR("Failed to use UI shader. Render frame failed.");
+            return false;
+        }
+
+        // apply globals
+        if (!material_system_apply_global(state_ptr->ui_shader_id, &state_ptr->ui_projection, &state_ptr->ui_view)) {
+            KERROR("Failed to use apply globals for UI shader. Render frame failed.");
+            return false;
+        }
 
         // draw ui geometries.
         count = packet->ui_geometry_count;
         for (u32 i = 0; i < count; ++i) {
+            material* m = 0;
+            if (packet->ui_geometries[i].geometry->material) {
+                m = packet->ui_geometries[i].geometry->material;
+            } else {
+                m = material_system_get_default();
+            }
+            // apply the material
+            if (!material_system_apply_instance(m)) {
+                KWARN("Failed to apply UI material '%s'. Skipping draw.", m->name);
+                continue;
+            }
+
+            // apply the locals
+            material_system_apply_local(m, &packet->geometries[i].model);
+
+            // draw it
             state_ptr->backend.draw_geometry(packet->ui_geometries[i]);
         }
 
@@ -159,15 +238,6 @@ void renderer_destroy_texture(struct texture* texture) {
     state_ptr->backend.destroy_texture(texture);
 }
 
-// materials
-b8 renderer_create_material(struct material* material) {
-    return state_ptr->backend.create_material(material);
-}
-
-void renderer_destroy_material(struct material* material) {
-    state_ptr->backend.destroy_material(material);
-}
-
 // geometry
 b8 renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices) {
     return state_ptr->backend.create_geometry(geometry, vertex_size, vertex_count, vertices, index_size, index_count, indices);
@@ -175,4 +245,63 @@ b8 renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_coun
 
 void renderer_destroy_geometry(geometry* geometry) {
     state_ptr->backend.destroy_geometry(geometry);
+}
+
+b8 renderer_renderpass_id(const char* name, u8* out_renderpass_id) {
+    // TODO: HACK: need dynamic renderpasses instead of hardcoding them.
+    if (strings_equali("Renderpass.Builtin.World", name)) {
+        *out_renderpass_id = BUILTIN_RENDERPASS_WORLD;
+        return true;
+    } else if (strings_equali("Renderpass.Builtin.UI", name)) {
+        *out_renderpass_id = BUILTIN_RENDERPASS_UI;
+        return true;
+    }
+
+    KERROR("renderer_renderpass_id: No renderpass named '%s'.", name);
+    *out_renderpass_id = INVALID_ID_U8;
+    return false;
+}
+
+b8 renderer_shader_create(shader* s, u8 renderpass_id, u8 stage_count, const char** stage_filenames, shader_stage* stages) {
+    return state_ptr->backend.shader_create(s, renderpass_id, stage_count, stage_filenames, stages);
+}
+
+void renderer_shader_destroy(shader* s) {
+    state_ptr->backend.shader_destroy(s);
+}
+
+b8 renderer_shader_initialize(shader* s) {
+    return state_ptr->backend.shader_initialize(s);
+}
+
+b8 renderer_shader_use(shader* s) {
+    return state_ptr->backend.shader_use(s);
+}
+
+b8 renderer_shader_bind_globals(shader* s) {
+    return state_ptr->backend.shader_bind_globals(s);
+}
+
+b8 renderer_shader_bind_instance(shader* s, u32 instance_id) {
+    return state_ptr->backend.shader_bind_instance(s, instance_id);
+}
+
+b8 renderer_shader_apply_globals(shader* s) {
+    return state_ptr->backend.shader_apply_globals(s);
+}
+
+b8 renderer_shader_apply_instance(shader* s) {
+    return state_ptr->backend.shader_apply_instance(s);
+}
+
+b8 renderer_shader_acquire_instance_resources(shader* s, u32* out_instance_id) {
+    return state_ptr->backend.shader_acquire_instance_resources(s, out_instance_id);
+}
+
+b8 renderer_shader_release_instance_resources(shader* s, u32 instance_id) {
+    return state_ptr->backend.shader_release_instance_resources(s, instance_id);
+}
+
+b8 renderer_set_uniform(shader* s, shader_uniform* uniform, const void* value) {
+    return state_ptr->backend.shader_set_uniform(s, uniform, value);
 }

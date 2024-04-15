@@ -21,7 +21,9 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
     VkRect2D scissor,                               // scissor is the area that is rendered and what is clipped off
     b8 is_wireframe,                                // is it a wirframe
     b8 depth_test_enabled,                          // for depth attachments and such
-    vulkan_pipeline* out_pipeline) {                // pointer to where the pipeline created will be
+    u32 push_constant_range_count,
+    range* push_constant_ranges,
+    vulkan_pipeline* out_pipeline) {  // pointer to where the pipeline created will be
     // view port state
     // create the vulkan struct for creating a pipeline viewport state, use the macro to format and fill with default values
     VkPipelineViewportStateCreateInfo viewport_state = {VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
@@ -124,12 +126,26 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
     VkPipelineLayoutCreateInfo pipeline_layout_create_info = {VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
 
     // push constants
-    VkPushConstantRange push_constant;
-    push_constant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;             // for the vertex shader stage
-    push_constant.offset = sizeof(mat4) * 0;                           // 0 for now
-    push_constant.size = sizeof(mat4) * 2;                             // equals 128 bytes, which is the max we want to use for push constants
-    pipeline_layout_create_info.pushConstantRangeCount = 1;            // only one push constant for now
-    pipeline_layout_create_info.pPushConstantRanges = &push_constant;  // array of push constants
+    if (push_constant_range_count > 0) {
+        if (push_constant_range_count > 32) {
+            KERROR("vulkan_graphics_pipeline_create: cannot have more than 32 push constant ranges. Passed count: %i", push_constant_range_count);
+            return false;
+        }
+
+        // NOTE: 32 is the max number of ranges we can ever have, since spec only guarantees 128 bytes with 4 byte alignment
+        VkPushConstantRange ranges[32];
+        kzero_memory(ranges, sizeof(VkPushConstantRange) * 32);
+        for (u32 i = 0; i < push_constant_range_count; ++i) {
+            ranges[i].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+            ranges[i].offset = push_constant_ranges[i].offset;
+            ranges[i].size = push_constant_ranges[i].size;
+        }
+        pipeline_layout_create_info.pushConstantRangeCount = push_constant_range_count;
+        pipeline_layout_create_info.pPushConstantRanges = ranges;
+    } else {
+        pipeline_layout_create_info.pushConstantRangeCount = 0;
+        pipeline_layout_create_info.pPushConstantRanges = 0;
+    }
 
     // descriptor set layouts - this has to do with uniforms
     pipeline_layout_create_info.setLayoutCount = descriptor_set_layout_count;

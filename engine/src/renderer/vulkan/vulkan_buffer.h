@@ -10,6 +10,7 @@ b8 vulkan_buffer_create(
     VkBufferUsageFlagBits usage,
     u32 memory_property_flags,
     b8 bind_on_create,
+    b8 use_freelist,  // @param use_freelist indicates if a freelist should be used. if not, allocate/free functions should also not be used.
     vulkan_buffer* out_buffer);
 
 // destroy a vulkan buffer, just pass in the context and the buffer to destroy

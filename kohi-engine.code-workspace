@@ -61,7 +61,8 @@
 			"span": "c",
 			"vector": "c",
 			"xstring": "c",
-			"xutility": "c"
+			"xutility": "c",
+			"chrono": "c"
 		}
 	}
 }

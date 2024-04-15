@@ -132,4 +132,18 @@ KAPI b8 string_to_u64(char* str, u64* u);
 // @param str the string to parse from.
 // @param b a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_b8(char* str, b8* b);
+KAPI b8 string_to_bool(char* str, b8* b);
+
+// @brief splits the given string by the delimiter provided and stores in the provided darray.  optionally trims each array.
+// NOTE: a string allocation occurs for each entry and must be freed by the caller
+// @param str the string to be split
+// @param delimiter the character to split by
+// @param str_darray a pointer to a darray of char arrays to hold the entries NOTE: must be a darray
+// @param trim_entries trims each entry if true
+// @param include_empty indicates if empty entries should be included
+// @return the number of entries yielded by the split operation
+KAPI u32 string_split(const char* str, char delimeter, char*** str_darray, b8 trim_entries, b8 include_empty);
+
+// @brief cleans up string allocations in str_darray, but does not free the darray itself
+// @param str_darray the darray to be cleaned up
+KAPI void string_cleanup_split_array(char** str_darray);

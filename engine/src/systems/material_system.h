@@ -30,3 +30,21 @@ void material_system_release(const char* name);
 
 // get the default material
 material* material_system_get_default();
+
+// @brief applies global-level data for the material shader id.
+// @param shader_id the identifier of the shader to apply globals for
+// @param projection a constant pointer to a projection matrix.
+// @param view a constant pointer to a view matrix
+// @return true on success, otherwise false
+b8 material_system_apply_global(u32 shader_id, const mat4* projection, const mat4* view);
+
+// @brief applies instance level material data for the given material
+// @param m a pointer to the material to be applied
+// @return true on success; otherwise false
+b8 material_system_apply_instance(material* m);
+
+// @brief applies local level material data (typically just a model matrix).
+// @param m a pointer to the material to be applied
+// @param model a constant pointer to the model matrix to be applied
+// @return true on success, otherwise false
+b8 material_system_apply_local(material* m, const mat4* model);

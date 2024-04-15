@@ -1,5 +1,6 @@
 #include "core/kstring.h"
 #include "core/kmemory.h"
+#include "containers/darray.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -17,7 +18,8 @@ u64 string_length(const char* str) {
 char* string_duplicate(const char* str) {
     u64 length = string_length(str);                        // get length of string to determine how much memory to reserve
     char* copy = kallocate(length + 1, MEMORY_TAG_STRING);  // allocate a new character array with lenght +1
-    kcopy_memory(copy, str, length + 1);
+    kcopy_memory(copy, str, length);
+    copy[length] = 0;
     return copy;
 }
 
@@ -38,7 +40,7 @@ b8 strings_equali(const char* str0, const char* str1) {
 // need to look upo these variadic arguments
 // performs string formatting to dest given format string and parameters
 // pass in a pointer to a destination that is large enough to hold the final string, the format to use, aand the dots represent any number of arguments to throw in
-KAPI i32 string_format(char* dest, const char* format, ...) {
+i32 string_format(char* dest, const char* format, ...) {
     if (dest) {                                                // if there is actually a place to put it
         __builtin_va_list arg_ptr;                             // create a variadic argument list ptr, im assuming this automattically pulls in all the arguments somehow and builds a list out of it
         va_start(arg_ptr, format);                             // start variadic argument, pass n the pointer and the format
@@ -54,7 +56,7 @@ KAPI i32 string_format(char* dest, const char* format, ...) {
 // @param format the string to be formatted
 // @param va_list the variadic argument list
 // @ returns the size of the data written
-KAPI i32 string_format_v(char* dest, const char* format, void* va_listp) {
+i32 string_format_v(char* dest, const char* format, void* va_listp) {
     if (dest) {  // if there is actually a place to put it
         // big, but can fit on the stack
         char buffer[32000];                                        // create a char array buffer with a size of 32000, which will be the max string length
@@ -79,17 +81,17 @@ char* string_empty(char* str) {
 }
 
 // copies a string from the source to the destination and returns a pointer to the destination - just using the standard library functions for now
-KAPI char* string_copy(char* dest, const char* source) {
+char* string_copy(char* dest, const char* source) {
     return strcpy(dest, source);
 }
 
 // copies a string from the source to the destination and returns a pointer to the destination - this one has a max length that can be copied - just using the standard library functions for now
-KAPI char* string_ncopy(char* dest, const char* source, i64 length) {
+char* string_ncopy(char* dest, const char* source, i64 length) {
     return strncpy(dest, source, length);
 }
 
 // trim the white space off of both sides of a string
-KAPI char* string_trim(char* str) {
+char* string_trim(char* str) {
     while (isspace((unsigned char)*str)) {  // if the char is a space
         str++;                              // move the pointer passed the spaces
     }
@@ -107,7 +109,7 @@ KAPI char* string_trim(char* str) {
 }
 
 // copy a substring of a string, copy from the destination from the start point for the amount of length into the destination
-KAPI void string_mid(char* dest, const char* source, i32 start, i32 length) {
+void string_mid(char* dest, const char* source, i32 start, i32 length) {
     if (length == 0) {
         return;  // cant get a substring from nothing
     }
@@ -135,7 +137,7 @@ KAPI void string_mid(char* dest, const char* source, i32 start, i32 length) {
 // @param str the string to be scanned
 // @param c the character to search for
 // @return the index of the first occurance of c, otherwise -1 if not found
-KAPI i32 string_index_of(char* str, char c) {
+i32 string_index_of(char* str, char c) {
     if (!str) {  // if no string was input
         return -1;
     }
@@ -156,7 +158,7 @@ KAPI i32 string_index_of(char* str, char c) {
 // @param str the string to parse from. should be space-delimited. (i.e. "1.0 2.0 3.0 4.0")
 // @param out_vector a pointer to the vector to write to
 // @return true if parsed successfully, otherwise false
-KAPI b8 string_to_vec4(char* str, vec4* out_vector) {
+b8 string_to_vec4(char* str, vec4* out_vector) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -170,7 +172,7 @@ KAPI b8 string_to_vec4(char* str, vec4* out_vector) {
 // @param str the string to parse from. should be space-delimited. (i.e. "1.0 2.0 3.0")
 // @param out_vector a pointer to the vector to write to
 // @return true if parsed successfully, otherwise false
-KAPI b8 string_to_vec3(char* str, vec3* out_vector) {
+b8 string_to_vec3(char* str, vec3* out_vector) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -184,7 +186,7 @@ KAPI b8 string_to_vec3(char* str, vec3* out_vector) {
 // @param str the string to parse from. should be space-delimited. (i.e. "1.0 2.0")
 // @param out_vector a pointer to the vector to write to
 // @return true if parsed successfully, otherwise false
-KAPI b8 string_to_vec2(char* str, vec2* out_vector) {
+b8 string_to_vec2(char* str, vec2* out_vector) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -198,7 +200,7 @@ KAPI b8 string_to_vec2(char* str, vec2* out_vector) {
 // @param str the strin to parse from. should NOT be postfixed with  'f'
 // @param f a pointer to the float to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_f32(char* str, f32* f) {
+b8 string_to_f32(char* str, f32* f) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -212,7 +214,7 @@ KAPI b8 string_to_f32(char* str, f32* f) {
 // @param str the strin to parse from.
 // @param f a pointer to the float to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_f64(char* str, f64* f) {
+b8 string_to_f64(char* str, f64* f) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -226,7 +228,7 @@ KAPI b8 string_to_f64(char* str, f64* f) {
 // @param str the strin to parse from.
 // @param i a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_i8(char* str, i8* i) {
+b8 string_to_i8(char* str, i8* i) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -240,7 +242,7 @@ KAPI b8 string_to_i8(char* str, i8* i) {
 // @param str the strin to parse from.
 // @param i a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_i16(char* str, i16* i) {
+b8 string_to_i16(char* str, i16* i) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -254,7 +256,7 @@ KAPI b8 string_to_i16(char* str, i16* i) {
 // @param str the strin to parse from.
 // @param i a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_i32(char* str, i32* i) {
+b8 string_to_i32(char* str, i32* i) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -268,7 +270,7 @@ KAPI b8 string_to_i32(char* str, i32* i) {
 // @param str the strin to parse from.
 // @param i a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_i64(char* str, i64* i) {
+b8 string_to_i64(char* str, i64* i) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -282,7 +284,7 @@ KAPI b8 string_to_i64(char* str, i64* i) {
 // @param str the strin to parse from.
 // @param u a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_u8(char* str, u8* u) {
+b8 string_to_u8(char* str, u8* u) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -296,7 +298,7 @@ KAPI b8 string_to_u8(char* str, u8* u) {
 // @param str the strin to parse from.
 // @param u a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_u16(char* str, u16* u) {
+b8 string_to_u16(char* str, u16* u) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -310,7 +312,7 @@ KAPI b8 string_to_u16(char* str, u16* u) {
 // @param str the strin to parse from.
 // @param u a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_u32(char* str, u32* u) {
+b8 string_to_u32(char* str, u32* u) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -324,7 +326,7 @@ KAPI b8 string_to_u32(char* str, u32* u) {
 // @param str the strin to parse from.
 // @param u a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_u64(char* str, u64* u) {
+b8 string_to_u64(char* str, u64* u) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
@@ -339,10 +341,111 @@ KAPI b8 string_to_u64(char* str, u64* u) {
 // @param str the string to parse from.
 // @param b a pointer to the int to write to
 // true if parsed successfully, false otherwise
-KAPI b8 string_to_b8(char* str, b8* b) {
+b8 string_to_bool(char* str, b8* b) {
     if (!str) {        // check that a string had been input
         return false;  // fail
     }
 
-    return strings_equal(str, "1") || strings_equali(str, "true");
+    *b = strings_equal(str, "1") || strings_equali(str, "true");
+    return *b;
+}
+
+// @brief splits the given string by the delimiter provided and stores in the provided darray.  optionally trims each array.
+// NOTE: a string allocation occurs for each entry and must be freed by the caller
+// @param str the string to be split
+// @param delimiter the character to split by
+// @param str_darray a pointer to a darray of char arrays to hold the entries NOTE: must be a darray
+// @param trim_entries trims each entry if true
+// @param include_empty indicates if empty entries should be included
+// @return the number of entries yielded by the split operation
+u32 string_split(const char* str, char delimeter, char*** str_darray, b8 trim_entries, b8 include_empty) {
+    if (!str || !str_darray) {
+        return 0;
+    }
+
+    char* result = 0;
+    u32 trimmed_length = 0;
+    u32 entry_count = 0;
+    u32 length = string_length(str);
+    char buffer[16384];  // if a single entry goes beyond this, well... just dont do that
+    u32 current_length = 0;
+    // iterate each character until a delimiter is reached
+    for (u32 i = 0; i < length; ++i) {
+        char c = str[i];
+
+        // found delimeter, finalize the string
+        if (c == delimeter) {
+            buffer[current_length] = 0;
+            result = buffer;
+            trimmed_length = current_length;
+            // trim if applicable
+            if (trim_entries && current_length > 0) {
+                result = string_trim(result);
+                trimmed_length = string_length(result);
+            }
+            // add new entry
+            if (trimmed_length > 0 || include_empty) {
+                char* entry = kallocate(sizeof(char) * (trimmed_length + 1), MEMORY_TAG_STRING);
+                if (trimmed_length == 0) {
+                    entry[0] = 0;
+                } else {
+                    string_ncopy(entry, result, trimmed_length);
+                    entry[trimmed_length] = 0;
+                }
+                char** a = *str_darray;
+                darray_push(a, entry);
+                *str_darray = a;
+                entry_count++;
+            }
+
+            // clear the buffer
+            kzero_memory(buffer, sizeof(char) * 16384);
+            current_length = 0;
+            continue;
+        }
+
+        buffer[current_length] = c;
+        current_length++;
+    }
+
+    // at the end of the string. if any chars are qued up, read them.
+    result = buffer;
+    trimmed_length = current_length;
+    // trim if applicable
+    if (trim_entries && current_length > 0) {
+        result = string_trim(result);
+        trimmed_length = string_length(result);
+    }
+    // add a new entry
+    if (trimmed_length > 0 || include_empty) {
+        char* entry = kallocate(sizeof(char) * (trimmed_length + 1), MEMORY_TAG_STRING);
+        if (trimmed_length == 0) {
+            entry[0] = 0;
+        } else {
+            string_ncopy(entry, result, trimmed_length);
+            entry[trimmed_length] = 0;
+        }
+        char** a = *str_darray;
+        darray_push(a, entry);
+        *str_darray = a;
+        entry_count++;
+    }
+
+    return entry_count;
+}
+
+// @brief cleans up string allocations in str_darray, but does not free the darray itself
+// @param str_darray the darray to be cleaned up
+void string_cleanup_split_array(char** str_darray) {
+    if (str_darray) {
+        u32 count = darray_length(str_darray);
+        // free each string
+        for (u32 i = 0; i < count; ++i) {
+            u32 len = string_length(str_darray[i]);
+            kfree(str_darray[i], sizeof(char) * (len + 1), MEMORY_TAG_STRING);
+        }
+
+        // clear the darray
+        darray_clear(str_darray);
+    }
 }

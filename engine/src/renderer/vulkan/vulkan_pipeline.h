@@ -17,7 +17,9 @@ b8 vulkan_graphics_pipeline_create(
     VkRect2D scissor,                               // scissor is the area that is rendered and what is clipped off
     b8 is_wireframe,                                // is it a wirframe
     b8 depth_test_enabled,                          // for depth attachments and such
-    vulkan_pipeline* out_pipeline);                 // pointer to where the pipeline created will be
+    u32 push_constant_range_count,
+    range* push_constant_ranges,
+    vulkan_pipeline* out_pipeline);  // pointer to where the pipeline created will be
 
 // destroy a vulkan pipeline, just takes in the context and the pipeline to destroy
 void vulkan_pipeline_destroy(vulkan_context* context, vulkan_pipeline* pipeline);

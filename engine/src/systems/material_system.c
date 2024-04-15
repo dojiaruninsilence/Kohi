@@ -8,6 +8,23 @@
 #include "systems/texture_system.h"
 
 #include "systems/resource_system.h"
+#include "systems/shader_system.h"
+
+typedef struct material_shader_uniform_locations {
+    u16 projection;
+    u16 view;
+    u16 diffuse_colour;
+    u16 diffuse_texture;
+    u16 model;
+} material_shader_uniform_locations;
+
+typedef struct ui_shader_uniform_locations {
+    u16 projection;
+    u16 view;
+    u16 diffuse_colour;
+    u16 diffuse_texture;
+    u16 model;
+} ui_shader_uniform_locations;
 
 // store the material system state here
 typedef struct material_system_state {
@@ -20,6 +37,14 @@ typedef struct material_system_state {
 
     // hashtable for material lookups
     hashtable registered_material_table;
+
+    // known locations for the material shader
+    material_shader_uniform_locations material_locations;
+    u32 material_shader_id;
+
+    // known locations for the ui shader
+    ui_shader_uniform_locations ui_locations;
+    u32 ui_shader_id;
 } material_system_state;
 
 // hold the data for referencing materials
@@ -59,6 +84,14 @@ b8 material_system_initialize(u64* memory_requirement, void* state, material_sys
     // pass in the state pointer and the config data
     state_ptr = state;
     state_ptr->config = config;
+
+    state_ptr->material_shader_id = INVALID_ID;
+    state_ptr->material_locations.diffuse_colour = INVALID_ID_U16;
+    state_ptr->material_locations.diffuse_texture = INVALID_ID_U16;
+
+    state_ptr->ui_shader_id = INVALID_ID;
+    state_ptr->ui_locations.diffuse_colour = INVALID_ID_U16;
+    state_ptr->ui_locations.diffuse_texture = INVALID_ID_U16;
 
     // the array block is after the state. already allocated, so just set the pointer
     void* array_block = state + struct_requirement;
@@ -179,6 +212,25 @@ material* material_system_acquire_from_config(material_config config) {
                 return 0;
             }
 
+            // get the uniform indices
+            shader* s = shader_system_get_by_id(m->shader_id);
+            // save off the locations for known types for quick lookups
+            if (state_ptr->material_shader_id == INVALID_ID && strings_equal(config.shader_name, BUILTIN_SHADER_NAME_MATERIAL)) {
+                state_ptr->material_shader_id = s->id;
+                state_ptr->material_locations.projection = shader_system_uniform_index(s, "projection");
+                state_ptr->material_locations.view = shader_system_uniform_index(s, "view");
+                state_ptr->material_locations.diffuse_colour = shader_system_uniform_index(s, "diffuse_colour");
+                state_ptr->material_locations.diffuse_texture = shader_system_uniform_index(s, "diffuse_texture");
+                state_ptr->material_locations.model = shader_system_uniform_index(s, "model");
+            } else if (state_ptr->ui_shader_id == INVALID_ID && strings_equal(config.shader_name, BUILTIN_SHADER_NAME_UI)) {
+                state_ptr->ui_shader_id = s->id;
+                state_ptr->ui_locations.projection = shader_system_uniform_index(s, "projection");
+                state_ptr->ui_locations.view = shader_system_uniform_index(s, "view");
+                state_ptr->ui_locations.diffuse_colour = shader_system_uniform_index(s, "diffuse_colour");
+                state_ptr->ui_locations.diffuse_texture = shader_system_uniform_index(s, "diffuse_texture");
+                state_ptr->ui_locations.model = shader_system_uniform_index(s, "model");
+            }
+
             // if this is the first time loading this texture set generation to 0, if not increment it
             if (m->generation == INVALID_ID) {
                 m->generation = 0;
@@ -247,14 +299,77 @@ material* material_system_get_default() {
     return 0;
 }
 
+#define MATERIAL_APPLY_OR_FAIL(expr)                  \
+    if (!expr) {                                      \
+        KERROR("Failed to apply material: %s", expr); \
+        return false;                                 \
+    }
+
+// @brief applies global-level data for the material shader id.
+// @param shader_id the identifier of the shader to apply globals for
+// @param projection a constant pointer to a projection matrix.
+// @param view a constant pointer to a view matrix
+// @return true on success, otherwise false
+b8 material_system_apply_global(u32 shader_id, const mat4* projection, const mat4* view) {
+    if (shader_id == state_ptr->material_shader_id) {
+        MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->material_locations.projection, projection));
+        MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->material_locations.view, view));
+    } else if (shader_id == state_ptr->ui_shader_id) {
+        MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->ui_locations.projection, projection));
+        MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->ui_locations.view, view));
+    } else {
+        KERROR("material_system_apply_global(): Unrecognized shader id '%d' ", shader_id);
+        return false;
+    }
+    MATERIAL_APPLY_OR_FAIL(shader_system_apply_global());
+    return true;
+}
+
+// @brief applies instance level material data for the given material
+// @param m a pointer to the material to be applied
+// @return true on success; otherwise false
+b8 material_system_apply_instance(material* m) {
+    // apply instance level uniforms
+    MATERIAL_APPLY_OR_FAIL(shader_system_bind_instance(m->internal_id));
+    if (m->shader_id == state_ptr->material_shader_id) {
+        // material shader
+        MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->material_locations.diffuse_colour, &m->diffuse_colour));
+        MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->material_locations.diffuse_texture, m->diffuse_map.texture));
+    } else if (m->shader_id == state_ptr->ui_shader_id) {
+        // ui shader
+        MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->ui_locations.diffuse_colour, &m->diffuse_colour));
+        MATERIAL_APPLY_OR_FAIL(shader_system_uniform_set_by_index(state_ptr->ui_locations.diffuse_texture, m->diffuse_map.texture));
+    } else {
+        KERROR("material_system_apply_instance(): Unrecognized shader id '%d' on shader '%s'.", m->shader_id, m->name);
+        return false;
+    }
+    MATERIAL_APPLY_OR_FAIL(shader_system_apply_instance());
+
+    return true;
+}
+
+// @brief applies local level material data (typically just a model matrix).
+// @param m a pointer to the material to be applied
+// @param model a constant pointer to the model matrix to be applied
+// @return true on success, otherwise false
+b8 material_system_apply_local(material* m, const mat4* model) {
+    if (m->shader_id == state_ptr->material_shader_id) {
+        return shader_system_uniform_set_by_index(state_ptr->material_locations.model, model);
+    } else if (m->shader_id == state_ptr->ui_shader_id) {
+        return shader_system_uniform_set_by_index(state_ptr->ui_locations.model, model);
+    }
+
+    KERROR("Unrecognized shader id '%d'", m->shader_id);
+    return false;
+}
+
 b8 load_material(material_config config, material* m) {
     kzero_memory(m, sizeof(material));
 
     // name
     string_ncopy(m->name, config.name, MATERIAL_NAME_MAX_LENGTH);
 
-    // type
-    m->type = config.type;
+    m->shader_id = shader_system_get_id(config.shader_name);
 
     // diffuse color
     m->diffuse_colour = config.diffuse_colour;
@@ -276,7 +391,12 @@ b8 load_material(material_config config, material* m) {
     // TODO: other maps
 
     // sent it off to the renderer to acquire resources
-    if (!renderer_create_material(m)) {
+    shader* s = shader_system_get(config.shader_name);
+    if (!s) {
+        KERROR("Unable to load material because its shader was not found: '%s'. This is likely a problem with the material asset.", config.shader_name);
+        return false;
+    }
+    if (!renderer_shader_acquire_instance_resources(s, &m->internal_id)) {
         KERROR("Failed to acquire renderer resources for material '%s'.", m->name);
         return false;
     }
@@ -287,8 +407,16 @@ b8 load_material(material_config config, material* m) {
 void destroy_material(material* m) {
     KTRACE("Destroying material '%s'...", m->name);
 
+    // release texture references
+    if (m->diffuse_map.texture) {
+        texture_system_release(m->diffuse_map.texture->name);
+    }
+
     // release renderer resources
-    renderer_destroy_material(m);
+    if (m->shader_id != INVALID_ID && m->internal_id != INVALID_ID) {
+        renderer_shader_release_instance_resources(shader_system_get_by_id(m->shader_id), m->internal_id);
+        m->shader_id = INVALID_ID;
+    }
 
     // zero it out, invalidate IDs
     kzero_memory(m, sizeof(material));
@@ -306,7 +434,8 @@ b8 create_default_material(material_system_state* state) {
     state->default_material.diffuse_map.use = TEXTURE_USE_MAP_DIFFUSE;
     state->default_material.diffuse_map.texture = texture_system_get_default_texture();
 
-    if (!renderer_create_material(&state->default_material)) {
+    shader* s = shader_system_get(BUILTIN_SHADER_NAME_MATERIAL);
+    if (!renderer_shader_acquire_instance_resources(s, &state->default_material.internal_id)) {
         KFATAL("Failed to aquire renderer resources for default material. Application cannot continue.");
         return false;
     }

@@ -33,7 +33,8 @@ static const char* memory_tag_strings[MEMORY_TAG_MAX_TAGS] = {
     "TRANSFORM  ",
     "ENTITY     ",
     "ENTITY_NODE",
-    "SCENE      "};
+    "SCENE      ",
+    "RESOURCE   "};
 
 // where we will store the state information for the memory system
 typedef struct memory_system_state {

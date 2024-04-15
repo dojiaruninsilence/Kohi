@@ -23,6 +23,7 @@ typedef enum memory_tag {  // enum is for enumeration, need to look this up as w
     MEMORY_TAG_ENTITY,
     MEMORY_TAG_ENTITY_NODE,
     MEMORY_TAG_SCENE,
+    MEMORY_TAG_RESOURCE,
 
     MEMORY_TAG_MAX_TAGS  // use this to itterate through all the tags - always has to be the last entry in the list
 } memory_tag;
