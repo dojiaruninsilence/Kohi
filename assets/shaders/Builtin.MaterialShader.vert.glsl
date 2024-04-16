@@ -33,7 +33,8 @@ layout(location = 1) out struct dto {
 
 void main() {
     out_dto.tex_coord = in_texcoord; // pass the tex coords to the frag shader
-    out_dto.normal = mat3(u_push_constants.model) * in_normal;
+    //out_dto.normal = in_normal;
+    out_dto.normal = normalize(in_normal * mat3(u_push_constants.model));
 	out_dto.ambient = global_ubo.ambient_colour;
     // the final position sent to the fragment shader, is projection matrix times the view matrix times the position, when we add a model matrix, it will go in between view and position, the order is important
     gl_Position = global_ubo.projection * global_ubo.view * u_push_constants.model * vec4(in_position, 1.0); 
