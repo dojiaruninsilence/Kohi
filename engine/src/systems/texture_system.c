@@ -12,6 +12,7 @@
 typedef struct texture_system_state {
     texture_system_config config;  // hang on to a copy of the config state
     texture default_texture;
+    texture default_specular_texture;
 
     // array of registered textures - works in tandem with registered_texture_table
     texture* registered_textures;
@@ -111,10 +112,10 @@ void texture_system_shutdown(void* state) {
 
 // pass in a name, and it checks if that texture has been loaded, if it has not been loaded it attempts to load it. and returns a pointer to the texture if successful
 // auto release - if a texture is no longer in use it will be released to free up memory
-texture* texture_system_aquire(const char* name, b8 auto_release) {
+texture* texture_system_acquire(const char* name, b8 auto_release) {
     // return default texture, but warn about it since this should be returned via get_default_texturez()
     if (strings_equali(name, DEFAULT_TEXTURE_NAME)) {  // case insensitive string comparison
-        KWARN("texture_system_aquire called for default textur. use texture_system_get_default_texture for texture 'default'.");
+        KWARN("texture_system_acquire called for default textur. use texture_system_get_default_texture for texture 'default'.");
         return &state_ptr->default_texture;
     }
 
@@ -141,7 +142,7 @@ texture* texture_system_aquire(const char* name, b8 auto_release) {
 
             // make sure an empty slot was actually found
             if (!t || ref.handle == INVALID_ID) {
-                KFATAL("texture_system_aquire - texture system cannot hold anymore textures. adjust configurations to allow more.");
+                KFATAL("texture_system_acquire - texture system cannot hold anymore textures. adjust configurations to allow more.");
                 return 0;
             }
 
@@ -222,6 +223,15 @@ texture* texture_system_get_default_texture() {
     return 0;
 }
 
+texture* texture_system_get_default_specular_texture() {
+    if (state_ptr) {
+        return &state_ptr->default_specular_texture;
+    }
+
+    KERROR("texture_system_get_default_specular_texture called before the texture system initialization! Null pointer returned");
+    return 0;
+}
+
 b8 create_default_textures(texture_system_state* state) {
     // NOTE: create default texture, a 256x256 blue/white checkerboard pattern
     // this is done in code to eliminate asset dependencies
@@ -264,6 +274,21 @@ b8 create_default_textures(texture_system_state* state) {
     // manually set the texture generation to invalid since this is a default texture
     state_ptr->default_texture.generation = INVALID_ID;
 
+    // specular texture
+    KTRACE("Creating default specular texture...");
+    u8 spec_pixels[16 * 16 * 4];
+    // default spec map is black (no specular)
+    kset_memory(spec_pixels, 0, sizeof(u8) * 16 * 16 * 4);
+    string_ncopy(state->default_specular_texture.name, DEFAULT_SPECULAR_TEXTURE_NAME, TEXTURE_NAME_MAX_LENGTH);
+    state->default_specular_texture.width = 16;
+    state->default_specular_texture.height = 16;
+    state->default_specular_texture.channel_count = 4;
+    state->default_specular_texture.generation = INVALID_ID;
+    state->default_specular_texture.has_transparency = false;
+    renderer_create_texture(spec_pixels, &state->default_specular_texture);
+    // manually set the texture generation to invalid since this is a default texture
+    state->default_specular_texture.generation = INVALID_ID;
+
     return true;
 }
 
@@ -271,6 +296,7 @@ b8 create_default_textures(texture_system_state* state) {
 void destroy_default_textures(texture_system_state* state) {
     if (state) {
         destroy_texture(&state->default_texture);
+        destroy_texture(&state->default_specular_texture);
     }
 }
 

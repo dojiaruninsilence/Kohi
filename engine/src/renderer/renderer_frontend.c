@@ -23,6 +23,7 @@ typedef struct renderer_system_state {
     mat4 projection;           // store the projection matrix
     mat4 view;                 // store a calculated view matrix
     vec4 ambient_colour;
+    vec3 view_position;
     mat4 ui_projection;  // store the projection matrix for the ui
     mat4 ui_view;        // store a calculated view matrix for the ui
     f32 near_clip;       // hang on to the near_clip value
@@ -134,7 +135,7 @@ b8 renderer_draw_frame(render_packet* packet) {
         }
 
         // apply globals
-        if (!material_system_apply_global(state_ptr->material_shader_id, &state_ptr->projection, &state_ptr->view, &state_ptr->ambient_colour)) {
+        if (!material_system_apply_global(state_ptr->material_shader_id, &state_ptr->projection, &state_ptr->view, &state_ptr->ambient_colour, &state_ptr->view_position)) {
             KERROR("Failed to use apply globals for material shader. Render frame failed.");
             return false;
         }
@@ -180,7 +181,7 @@ b8 renderer_draw_frame(render_packet* packet) {
         }
 
         // apply globals
-        if (!material_system_apply_global(state_ptr->ui_shader_id, &state_ptr->ui_projection, &state_ptr->ui_view, 0)) {
+        if (!material_system_apply_global(state_ptr->ui_shader_id, &state_ptr->ui_projection, &state_ptr->ui_view, 0, 0)) {
             KERROR("Failed to use apply globals for UI shader. Render frame failed.");
             return false;
         }
@@ -227,8 +228,9 @@ b8 renderer_draw_frame(render_packet* packet) {
 }
 
 // just pass through - set view
-void renderer_set_view(mat4 view) {
+void renderer_set_view(mat4 view, vec3 view_position) {
     state_ptr->view = view;
+    state_ptr->view_position = view_position;
 }
 
 // just pass through - create texture

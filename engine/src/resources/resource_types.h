@@ -51,7 +51,9 @@ typedef struct texture {
 // a list of different uses textures may have
 typedef enum texture_use {
     TEXTURE_USE_UNKNOWN = 0x00,
-    TEXTURE_USE_MAP_DIFFUSE = 0x01  // textures with this tag will be used as a diffuse map
+    TEXTURE_USE_MAP_DIFFUSE = 0x01,  // textures with this tag will be used as a diffuse map
+    // @brief the texture is used as a specular map
+    TEXTURE_USE_MAP_SPECULAR = 0x02
 } texture_use;
 
 // store data for texture maps
@@ -69,7 +71,11 @@ typedef struct material_config {
     char* shader_name;  // type like ui or world
     b8 auto_release;    // does it auto release
     vec4 diffuse_colour;
+    // @brief the shininess of the material
+    f32 shininess;
     char diffuse_map_name[TEXTURE_NAME_MAX_LENGTH];  // ultimately becomes the texture name, for loading and unloading purposes
+    // @brief the specular map name
+    char specular_map_name[TEXTURE_NAME_MAX_LENGTH];
 } material_config;
 
 // where we will store the data for the materials
@@ -80,6 +86,12 @@ typedef struct material {
     char name[MATERIAL_NAME_MAX_LENGTH];  // name of the material
     vec4 diffuse_colour;
     texture_map diffuse_map;  // store array of textures and their uses
+
+    // @brief the specular texture map
+    texture_map specular_map;
+
+    // @brief the material shininess, determines how concentrated the specular lighting is
+    f32 shininess;
 
     u32 shader_id;
 } material;
