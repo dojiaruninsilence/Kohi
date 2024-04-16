@@ -5,6 +5,8 @@
 layout(location = 0) in vec3 in_position;
 layout(location = 1) in vec3 in_normal;
 layout(location = 2) in vec2 in_texcoord;
+layout(location = 3) in vec4 in_colour;
+layout(location = 4) in vec4 in_tangent;
 
 // very similar to a stucture in c
 // each uniform will have a unique binding - its like the slot the uniform fits into
@@ -32,14 +34,19 @@ layout(location = 1) out struct dto {
     vec3 normal;
     vec3 view_position;
     vec3 frag_position;
+    vec4 colour;
+    vec4 tangent;
 } out_dto;
 
 void main() {
     out_dto.tex_coord = in_texcoord; // pass the tex coords to the frag shader
+    out_dto.colour = in_colour;
     // fragment position in world space
     out_dto.frag_position = vec3(u_push_constants.model * vec4(in_position, 1.0));
     // copy the normal over
-    out_dto.normal = mat3(u_push_constants.model) * in_normal;
+    mat3 m3_model = mat3(u_push_constants.model);
+    out_dto.normal = m3_model * in_normal;
+    out_dto.tangent = vec4(normalize(m3_model * in_tangent.xyz), in_tangent.w);
 	out_dto.ambient = global_ubo.ambient_colour;
     out_dto.view_position = global_ubo.view_position;
     // the final position sent to the fragment shader, is projection matrix times the view matrix times the position, when we add a model matrix, it will go in between view and position, the order is important

@@ -79,6 +79,11 @@ typedef struct vertex_3d {
     vec3 normal;
 
     vec2 texcoord;
+
+    // @brief the color of the vertex
+    vec4 colour;
+    // @brief the tangent of the vertex
+    vec4 tangent;
 } vertex_3d;
 
 // for 2 dimentional renderering

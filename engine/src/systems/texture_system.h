@@ -13,6 +13,9 @@ typedef struct texture_system_config {
 // @brief the default specular texture name
 #define DEFAULT_SPECULAR_TEXTURE_NAME "default_SPEC"
 
+// @brief the default normal texture name
+#define DEFAULT_NORMAL_TEXTURE_NAME "default_NORM"
+
 // initialize the texture system- it takes in a pointer to how much memory is required, a pointer to a block of memory, and the texture system configurations
 // this is one of the 2 stage functions, 1st time call with a zero for the block of memory(state), and it will calculate the memory requirements
 // after allocating memory for the system, call again and pass in the block of memory - returns a bool for success checking
@@ -33,3 +36,6 @@ texture* texture_system_get_default_texture();
 
 // @brief gets a pointer to the default specular texture. no reference counting is done for default textures
 texture* texture_system_get_default_specular_texture();
+
+// @brief gets a pointer to the default normal texture. no reference counting is done for default textures
+texture* texture_system_get_default_normal_texture();

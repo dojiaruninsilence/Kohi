@@ -53,7 +53,9 @@ typedef enum texture_use {
     TEXTURE_USE_UNKNOWN = 0x00,
     TEXTURE_USE_MAP_DIFFUSE = 0x01,  // textures with this tag will be used as a diffuse map
     // @brief the texture is used as a specular map
-    TEXTURE_USE_MAP_SPECULAR = 0x02
+    TEXTURE_USE_MAP_SPECULAR = 0x02,
+    // @brief the texture is used as a normal map
+    TEXTURE_USE_MAP_NORMAL = 0x03
 } texture_use;
 
 // store data for texture maps
@@ -76,6 +78,8 @@ typedef struct material_config {
     char diffuse_map_name[TEXTURE_NAME_MAX_LENGTH];  // ultimately becomes the texture name, for loading and unloading purposes
     // @brief the specular map name
     char specular_map_name[TEXTURE_NAME_MAX_LENGTH];
+    // @brief the normal map name
+    char normal_map_name[TEXTURE_NAME_MAX_LENGTH];
 } material_config;
 
 // where we will store the data for the materials
@@ -89,6 +93,8 @@ typedef struct material {
 
     // @brief the specular texture map
     texture_map specular_map;
+    // @brief the normal texture map
+    texture_map normal_map;
 
     // @brief the material shininess, determines how concentrated the specular lighting is
     f32 shininess;

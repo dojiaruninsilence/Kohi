@@ -24,6 +24,7 @@
 
 // TODO: temp
 #include "math/kmath.h"
+#include "math/geometry_utils.h"
 // TODO: temp
 
 // there will only be one instance of application running
@@ -104,11 +105,16 @@ b8 event_on_debug_event(u16 code, void* sender, void* listener_inst, event_conte
         "cobblestone_SPEC",
         "paving_SPEC",
         "paving2_SPEC"};
+    const char* normal_names[3] = {
+        "cobblestone_NRM",
+        "paving_NRM",
+        "paving2_NRM"};
     static i8 choice = 2;
 
     // save off the old names
     const char* old_name = names[choice];
     const char* old_spec_name = names[choice];
+    const char* old_norm_name = names[choice];
 
     choice++;     // increment
     choice %= 3;  // then mod back to 0. still need to learn this
@@ -134,6 +140,16 @@ b8 event_on_debug_event(u16 code, void* sender, void* listener_inst, event_conte
 
         // release the old specular texture
         texture_system_release(old_spec_name);
+
+        // acquire the new normal texture
+        app_state->test_geometry->material->normal_map.texture = texture_system_acquire(normal_names[choice], true);
+        if (!app_state->test_geometry->material->normal_map.texture) {
+            KWARN("event_on_debug_event no normal texture! using default");
+            app_state->test_geometry->material->normal_map.texture = texture_system_get_default_normal_texture();
+        }
+
+        // Release the old spec normal.
+        texture_system_release(old_norm_name);
     }
 
     return true;
@@ -298,8 +314,9 @@ b8 application_create(game* game_inst) {
     }
 
     // TODO: temp
-    // load up a plane configuration, and load geometry from it.
+    // load up a cube configuration, and load geometry from it.
     geometry_config g_config = geometry_system_generate_cube_config(10.0f, 10.0f, 10.0f, 1.0f, 1.0f, "test_cube", "test_material");
+    geometry_generate_tangents(g_config.vertex_count, g_config.vertices, g_config.index_count, g_config.indices);
     app_state->test_geometry = geometry_system_acquire_from_config(g_config, true);
 
     // clean up the allocations for the geometry config
