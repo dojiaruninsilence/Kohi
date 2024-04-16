@@ -72,8 +72,12 @@ typedef union mat4_u {
 } mat4;
 
 // vertex is an individual point of geometry, that holds various bits of information, not only position, but texture mappinc coords, color, ect -
+// these want to be in this order everywhere the are used
 typedef struct vertex_3d {
     vec3 position;  // we are only going to hold the position to start with in a vec3
+    // @brief the normal of the vertex - like the direction that is straight out
+    vec3 normal;
+
     vec2 texcoord;
 } vertex_3d;
 

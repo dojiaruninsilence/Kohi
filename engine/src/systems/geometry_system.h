@@ -64,3 +64,5 @@ geometry* geometry_system_get_default_2d();
 // @param material_name the name of the material to be used
 // @return a geometry configuration which can then be fed into geometry_system_acquire_from_config()
 geometry_config geometry_system_generate_plane_config(f32 width, f32 height, u32 x_segment_count, u32 y_segment_count, f32 tile_x, f32 tile_y, const char* name, const char* material_name);
+
+geometry_config geometry_system_generate_cube_config(f32 width, f32 height, f32 depth, f32 tile_x, f32 tile_y, const char* name, const char* material_name);

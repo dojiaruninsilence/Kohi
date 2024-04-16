@@ -36,7 +36,7 @@ material* material_system_get_default();
 // @param projection a constant pointer to a projection matrix.
 // @param view a constant pointer to a view matrix
 // @return true on success, otherwise false
-b8 material_system_apply_global(u32 shader_id, const mat4* projection, const mat4* view);
+b8 material_system_apply_global(u32 shader_id, const mat4* projection, const mat4* view, const vec4* ambient_colour);
 
 // @brief applies instance level material data for the given material
 // @param m a pointer to the material to be applied

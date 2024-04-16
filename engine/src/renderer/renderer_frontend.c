@@ -22,10 +22,11 @@ typedef struct renderer_system_state {
     renderer_backend backend;  // store the renderer backend
     mat4 projection;           // store the projection matrix
     mat4 view;                 // store a calculated view matrix
-    mat4 ui_projection;        // store the projection matrix for the ui
-    mat4 ui_view;              // store a calculated view matrix for the ui
-    f32 near_clip;             // hang on to the near_clip value
-    f32 far_clip;              // hang on to the far_clip value
+    vec4 ambient_colour;
+    mat4 ui_projection;  // store the projection matrix for the ui
+    mat4 ui_view;        // store a calculated view matrix for the ui
+    f32 near_clip;       // hang on to the near_clip value
+    f32 far_clip;        // hang on to the far_clip value
     u32 material_shader_id;
     u32 ui_shader_id;
 } renderer_system_state;
@@ -88,6 +89,8 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     // define default values for the view matrix
     state_ptr->view = mat4_translation((vec3){0, 0, 30.0f});
     state_ptr->view = mat4_inverse(state_ptr->view);
+    // TODO: obtain from the scene
+    state_ptr->ambient_colour = (vec4){0.25f, 0.25f, 0.25f, 1.0f};
 
     // ui projection and view
     state_ptr->ui_projection = mat4_orthographic(0, 1280.0f, 720.0f, 0, -100.0f, 100.0f);  // intentionally flipped on the y axis
@@ -131,7 +134,7 @@ b8 renderer_draw_frame(render_packet* packet) {
         }
 
         // apply globals
-        if (!material_system_apply_global(state_ptr->material_shader_id, &state_ptr->projection, &state_ptr->view)) {
+        if (!material_system_apply_global(state_ptr->material_shader_id, &state_ptr->projection, &state_ptr->view, &state_ptr->ambient_colour)) {
             KERROR("Failed to use apply globals for material shader. Render frame failed.");
             return false;
         }
@@ -177,7 +180,7 @@ b8 renderer_draw_frame(render_packet* packet) {
         }
 
         // apply globals
-        if (!material_system_apply_global(state_ptr->ui_shader_id, &state_ptr->ui_projection, &state_ptr->ui_view)) {
+        if (!material_system_apply_global(state_ptr->ui_shader_id, &state_ptr->ui_projection, &state_ptr->ui_view, 0)) {
             KERROR("Failed to use apply globals for UI shader. Render frame failed.");
             return false;
         }
@@ -198,7 +201,7 @@ b8 renderer_draw_frame(render_packet* packet) {
             }
 
             // apply the locals
-            material_system_apply_local(m, &packet->geometries[i].model);
+            material_system_apply_local(m, &packet->ui_geometries[i].model);
 
             // draw it
             state_ptr->backend.draw_geometry(packet->ui_geometries[i]);
