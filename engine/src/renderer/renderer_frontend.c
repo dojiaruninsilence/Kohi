@@ -152,6 +152,7 @@ void renderer_on_resized(u16 width, u16 height) {
 
 // where the application calls for all draw calls?
 b8 renderer_draw_frame(render_packet* packet) {
+    state_ptr->backend.frame_number++;
     // if the begin frame returned successfully, mid-frame operations may continue
     if (state_ptr->backend.begin_frame(&state_ptr->backend, packet->delta_time)) {  // call backend begin frame pointer function, pass in the delta time from the packet
         // world renderpass
@@ -181,10 +182,15 @@ b8 renderer_draw_frame(render_packet* packet) {
                 m = material_system_get_default();
             }
 
-            // apply the material
-            if (!material_system_apply_instance(m)) {
-                KWARN("Failed to apply material '%s'. Skipping draw.", m->name);
-                continue;
+            // apply the material if it hasn't already been this frame. this keeps the same material from being updated multiple times.
+            if (m->render_frame_number != state_ptr->backend.frame_number) {
+                if (!material_system_apply_instance(m)) {
+                    KWARN("Failed to apply material '%s'. Skipping draw.", m->name);
+                    continue;
+                } else {
+                    // sync the frame number
+                    m->render_frame_number = state_ptr->backend.frame_number;
+                }
             }
 
             // apply the locals
@@ -247,7 +253,6 @@ b8 renderer_draw_frame(render_packet* packet) {
 
         // end the frame if this fails, it is likely unrecoverable
         b8 result = state_ptr->backend.end_frame(&state_ptr->backend, packet->delta_time);
-        state_ptr->backend.frame_number++;
 
         if (!result) {
             KERROR("renderer_end_frame failed. application shutting down...");
