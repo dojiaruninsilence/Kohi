@@ -98,6 +98,11 @@ typedef enum system_event_code {
     // u16 width = data.data.u16[1]
     EVENT_CODE_RESIZED = 0x08,
 
+    // change the render mode for debugging purposes
+    // context usage:
+    // i32 mode = context.data.i32[0];
+    EVENT_CODE_SET_RENDER_MODE = 0x0A,
+
     // here are some event codes for debugging
     EVENT_CODE_DEBUG0 = 0x10,
     EVENT_CODE_DEBUG1 = 0x11,

@@ -16,6 +16,7 @@ layout(set = 0, binding = 0) uniform global_uniform_object { // structure defini
     mat4 view;
     vec4 ambient_colour;
     vec3 view_position;
+    int mode;
 } global_ubo; // name variable
 
 layout(push_constant) uniform push_constants {
@@ -51,4 +52,6 @@ void main() {
     out_dto.view_position = global_ubo.view_position;
     // the final position sent to the fragment shader, is projection matrix times the view matrix times the position, when we add a model matrix, it will go in between view and position, the order is important
     gl_Position = global_ubo.projection * global_ubo.view * u_push_constants.model * vec4(in_position, 1.0); 
+
+    out_mode = global_ubo.mode;
 }
