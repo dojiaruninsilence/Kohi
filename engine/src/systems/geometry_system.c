@@ -127,6 +127,20 @@ geometry* geometry_system_acquire_from_config(geometry_config config, b8 auto_re
     return g;
 }
 
+// @brief frees resources held by the provided configuration
+// @param config a pointer to the configuration to be disposed of
+void geometry_system_config_dispose(geometry_config* config) {
+    if (config) {
+        if (config->vertices) {
+            kfree(config->vertices, config->vertex_size * config->vertex_count, MEMORY_TAG_ARRAY);
+        }
+        if (config->indices) {
+            kfree(config->indices, config->index_size * config->index_count, MEMORY_TAG_ARRAY);
+        }
+        kzero_memory(config, sizeof(geometry_config));
+    }
+}
+
 // @brief realeases a reference to the provided geometry
 // @param geometry the geometry to be released
 void geometry_system_release(geometry* geometry) {

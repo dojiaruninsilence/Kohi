@@ -120,7 +120,7 @@ typedef struct geometry {
 typedef struct mesh {
     u16 geometry_count;
     geometry** geometries;  // an array of pointers, not the acutal geometries
-    mat4 model;
+    transform transform;
 } mesh;
 
 // @brief shader stages available in the system

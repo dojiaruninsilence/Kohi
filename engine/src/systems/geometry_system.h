@@ -40,6 +40,10 @@ geometry* geometry_system_acquire_by_id(u32 id);
 // @return a pointer to the acquired geometry or nullptr if failed
 geometry* geometry_system_acquire_from_config(geometry_config config, b8 auto_release);
 
+// @brief frees resources held by the provided configuration
+// @param config a pointer to the configuration to be disposed of
+void geometry_system_config_dispose(geometry_config* config);
+
 // @brief realeases a reference to the provided geometry
 // @param geometry the geometry to be released
 void geometry_system_release(geometry* geometry);

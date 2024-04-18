@@ -954,18 +954,18 @@ KINLINE vec3 mat4_left(mat4 matrix) {
 // @param matrix the matrix from which to base the vector
 // @return a 3-component directional vector
 KINLINE vec3 mat4_right(mat4 matrix) {
-    vec3 right;                 // create a vec3 right
+    vec3 right;                // create a vec3 right
     right.x = matrix.data[0];  // get x value from negative matrix at index 2
     right.y = matrix.data[4];  // get y value from negative matrix at index 6
     right.z = matrix.data[8];  // get z value from negative matrix at index 10
-    vec3_normalize(&right);     // normalize the values recieved
+    vec3_normalize(&right);    // normalize the values recieved
     return right;
 }
 
 // quaternions ------------------------------------------------------------------------------------------------------------------------------------------------
 
 // create an identiy quaternion - the default quaternion
-KINLINE quat quat_identify() {
+KINLINE quat quat_identity() {
     return (quat){0, 0, 0, 1.0f};  // create a vec4 with all zeros except a 1 in the w index
 }
 

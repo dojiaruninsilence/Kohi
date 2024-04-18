@@ -91,3 +91,27 @@ typedef struct vertex_2d {
     vec2 position;
     vec2 texcoord;
 } vertex_2d;
+
+// @brief represents the transform of an object in the world. transforms can
+// have a parent whose own transform is then taken into account.
+// NOTE: the properties of this should not be edited directly, but done via the
+// functions in transform.h to ensure proper matrix generation.
+typedef struct transform {
+    // @brief the position in the world
+    vec3 position;
+    // @brief the rotation in the world
+    quat rotation;
+    // @brief the scale in the world
+    vec3 scale;
+
+    // @brief indicates if the position, rotation or scale have chaged,
+    // indicating that the local matrix needs to be recalculated.
+    b8 is_dirty;
+
+    // @brief the local transformation matrix, updated whenever the position,
+    // rotation or scale have changed
+    mat4 local;
+
+    // @brief a pointer to a parent transform if one is assigned, can also be null
+    struct transform* parent;
+} transform;
