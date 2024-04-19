@@ -118,7 +118,7 @@ typedef struct renderer_backend {
     // @brief applies data for the currently bound instances
     // @param s a pointer to the shader to apply the instance data for
     // @return b8 true on success, otherwise false
-    b8 (*shader_apply_instance)(struct shader* s);
+    b8 (*shader_apply_instance)(struct shader* s, b8 needs_update);
 
     // @brief acquires internal instance level resources and provides an instance id
     // @param s a pointer to the shader to acquire resources from

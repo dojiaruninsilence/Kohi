@@ -37,6 +37,28 @@ b8 strings_equali(const char* str0, const char* str1) {
 #endif
 }
 
+// @brief case sensitive string comparison for a number of characters.
+// @param str0 the first string to be compared
+// @param str1 the second string to be compared
+// @param length the maximum number of characters to be compared
+// @return true if the same, otherwise false
+KAPI b8 strings_nequal(const char* str0, const char* str1, u64 length) {
+    return strncmp(str0, str1, length);
+}
+
+// @brief case insensitive string comparison for a number of characters
+// @param str0 the first string to be compared
+// @param str1 the second string to be compared
+// @param length the maximum number of characters to be compared
+// @return true if the same, otherwise false
+b8 strings_nequali(const char* str0, const char* str1, u64 length) {
+#if defined(__GNUC__)
+    return strncasecmp(str0, str1, length) == 0;
+#elif (defined _MSC_VER)
+    return _strnicmp(str0, str1, length) == 0;
+#endif
+}
+
 // need to look upo these variadic arguments
 // performs string formatting to dest given format string and parameters
 // pass in a pointer to a destination that is large enough to hold the final string, the format to use, aand the dots represent any number of arguments to throw in
@@ -448,4 +470,94 @@ void string_cleanup_split_array(char** str_darray) {
         // clear the darray
         darray_clear(str_darray);
     }
+}
+
+// @brief appends append to source and returns a new string
+// @param dest the destination string
+// @param source the string to be appended to
+// @param append the string to append to source
+// @returns a new string containing the concatenation of the two strings
+void string_append_string(char* dest, const char* src, const char* append) {
+    sprintf(dest, "%s%s", src, append);
+}
+
+// @brief appends the supplied integer to source and outputs to dest
+// @brief dest the destination for the string
+// @param source the string to be appended to
+// @param i the interger to be appended
+void string_append_int(char* dest, const char* source, i64 i) {
+    sprintf(dest, "%s%lli", source, i);
+}
+
+// @brief appends the supplied float to source and outputs to dest
+// @brief dest the destination for the string
+// @param source the string to be appended to
+// @param f the float to be appended
+void string_append_float(char* dest, const char* source, f32 f) {
+    sprintf(dest, "%s%f", source, f);
+}
+
+// @brief appends the supplied boolean (as either "true" or "false") to source and outputs to dest
+// @brief dest the destination for the string
+// @param source the string to be appended to
+// @param b the boolean to be appended
+void string_append_bool(char* dest, const char* source, b8 b) {
+    sprintf(dest, "%s%s", source, b ? "true" : "false");
+}
+
+// @brief appends the supplied character to source and outputs to dest
+// @brief dest the destination for the string
+// @param source the string to be appended to
+// @param c the character to be appended
+void string_append_char(char* dest, const char* source, char c) {
+    sprintf(dest, "%s%c", source, c);
+}
+
+// @brief extracts the directory from a full file path
+// @param dest the destination for the path
+// @param path the full path to extract from
+void string_directory_from_path(char* dest, const char* path) {
+    u64 length = strlen(path);
+    for (i32 i = length; i >= 0; --i) {
+        char c = path[i];
+        if (c == '/' || c == '\\') {
+            strncpy(dest, path, i + 1);
+            return;
+        }
+    }
+}
+
+// @brief extracts the filename (including file extension) from a full file path
+// @param dest the destination for the filename
+// @param path the full path to extract from
+void string_filename_from_path(char* dest, const char* path) {
+    u64 length = strlen(path);
+    for (i32 i = length; i >= 0; --i) {
+        char c = path[i];
+        if (c == '/' || c == '\\') {
+            strcpy(dest, path + i + 1);
+            return;
+        }
+    }
+}
+
+// @brief extracts the filename (excluding file extension) from a full file path
+// @param dest the destination for the filename
+// @param path the full path to extract from
+void string_filename_no_extension_from_path(char* dest, const char* path) {
+    u64 length = strlen(path);
+    u64 start = 0;
+    u64 end = 0;
+    for (i32 i = length; i >= 0; --i) {
+        char c = path[i];
+        if (end == 0 && c == '.') {
+            end = i;
+        }
+        if (start == 0 && (c == '/' || c == '\\')) {
+            start = i + 1;
+            break;
+        }
+    }
+
+    string_mid(dest, path, start, end - start);
 }

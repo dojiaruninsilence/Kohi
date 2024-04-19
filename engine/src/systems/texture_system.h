@@ -10,6 +10,9 @@ typedef struct texture_system_config {
 // so we can change this in one place
 #define DEFAULT_TEXTURE_NAME "default"
 
+// @brief the default diffuse texture name
+#define DEFAULT_DIFFUSE_TEXTURE_NAME "default_DIFF"
+
 // @brief the default specular texture name
 #define DEFAULT_SPECULAR_TEXTURE_NAME "default_SPEC"
 
@@ -33,6 +36,9 @@ void texture_system_release(const char* name);
 
 // get a pointer to the default texture
 texture* texture_system_get_default_texture();
+
+// @brief gets a pointer to the default diffuse texture. no reference counting is done for default textures
+texture* texture_system_get_default_diffuse_texture();
 
 // @brief gets a pointer to the default specular texture. no reference counting is done for default textures
 texture* texture_system_get_default_specular_texture();

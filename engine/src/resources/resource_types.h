@@ -11,6 +11,8 @@ typedef enum resource_type {
     RESOURCE_TYPE_STATIC_MESH,
     // @brief shader resource type(or more accurately shader config)
     RESOURCE_TYPE_SHADER,
+    // @brief mesh resource type (collection of geometry configs)
+    RESOURCE_TYPE_MESH,
     RESOURCE_TYPE_CUSTOM
 } resource_type;
 

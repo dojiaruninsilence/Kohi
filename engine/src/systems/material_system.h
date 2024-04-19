@@ -44,7 +44,7 @@ b8 material_system_apply_global(u32 shader_id, const mat4* projection, const mat
 // @brief applies instance level material data for the given material
 // @param m a pointer to the material to be applied
 // @return true on success; otherwise false
-b8 material_system_apply_instance(material* m);
+b8 material_system_apply_instance(material* m, b8 needs_update);
 
 // @brief applies local level material data (typically just a model matrix).
 // @param m a pointer to the material to be applied

@@ -1,6 +1,7 @@
 #include "geometry_utils.h"
 
 #include "kmath.h"
+#include "core/logger.h"
 
 // @brief calculates normals for the given vertex and index data. modifies vertices in place
 // @param vertex_count the number of vertices
@@ -58,10 +59,73 @@ void geometry_generate_tangents(u32 vertex_count, vertex_3d* vertices, u32 index
 
         f32 sx = deltaU1, sy = deltaU2;
         f32 tx = deltaV1, ty = deltaV2;
-        f32 handedness = ((tx * sy - ty * sx) < 0.0f) ? -1.0f : 1.0f; // to flip the normals if the geometry is flipped
+        f32 handedness = ((tx * sy - ty * sx) < 0.0f) ? -1.0f : 1.0f;  // to flip the normals if the geometry is flipped
         vec4 t4 = vec4_from_vec3(tangent, handedness);
         vertices[i0].tangent = t4;
         vertices[i1].tangent = t4;
         vertices[i2].tangent = t4;
     }
+}
+
+b8 vertex3d_equal(vertex_3d vert_0, vertex_3d vert_1) {
+    return vec3_compare(vert_0.position, vert_1.position, K_FLOAT_EPSILON) &&
+           vec3_compare(vert_0.normal, vert_1.normal, K_FLOAT_EPSILON) &&
+           vec2_compare(vert_0.texcoord, vert_1.texcoord, K_FLOAT_EPSILON) &&
+           vec4_compare(vert_0.colour, vert_1.colour, K_FLOAT_EPSILON) &&
+           vec4_compare(vert_0.tangent, vert_1.tangent, K_FLOAT_EPSILON);
+}
+
+void reassign_index(u32 index_count, u32* indices, u32 from, u32 to) {
+    for (u32 i = 0; i < index_count; ++i) {
+        if (indices[i] == from) {
+            indices[i] = to;
+        } else if (indices[i] > from) {
+            // pull in all indices higher than 'from' by 1
+            indices[i]--;
+        }
+    }
+}
+
+// @brief de-duplicates vertices, leaving only unique ones. leaves the original vertices array intact. allocates a new array
+// in out_vertices. modifies indices in place. original vertex array should be freed by the caller
+// @param vertex_count the number of vertices in the array
+// @param vertices the original array of vertices to be de - duplicated. not modified.
+// @param index_count the number of indices in the array
+// @param indices the array of indices. modified in place as vertices are removed
+// @param out_vertex_count a pointer to hold the final vertex count
+// @param out_vertices a pointer to hold the array of de-duplicated vertices
+void geometry_deduplicate_vertices(u32 vertex_count, vertex_3d* vertices, u32 index_count, u32* indices, u32* out_vertex_count, vertex_3d** out_vertices) {
+    // create new arrays for the collection to sit in
+    vertex_3d* unique_verts = kallocate(sizeof(vertex_3d) * vertex_count, MEMORY_TAG_ARRAY);
+    *out_vertex_count = 0;
+
+    u32 found_count = 0;
+    for (u32 v = 0; v < vertex_count; ++v) {
+        b8 found = false;
+        for (u32 u = 0; u < *out_vertex_count; ++u) {
+            if (vertex3d_equal(vertices[v], unique_verts[u])) {
+                // reassign indices, DO NOT COPY
+                reassign_index(index_count, indices, v - found_count, u);
+                found = true;
+                found_count++;
+                break;
+            }
+        }
+
+        if (!found) {
+            // copy over to unique.
+            unique_verts[*out_vertex_count] = vertices[v];
+            (*out_vertex_count)++;
+        }
+    }
+
+    // allocate new vertices array
+    *out_vertices = kallocate(sizeof(vertex_3d) * (*out_vertex_count), MEMORY_TAG_ARRAY);
+    // copy over unique
+    kcopy_memory(*out_vertices, unique_verts, sizeof(vertex_3d) * (*out_vertex_count));
+    // destroy temp array
+    kfree(unique_verts, sizeof(vertex_3d) * vertex_count, MEMORY_TAG_ARRAY);
+
+    u32 removed_count = vertex_count - *out_vertex_count;
+    KDEBUG("geometry_deduplicate_vertices: removed %d vertices, orig/now %d%d.", removed_count, vertex_count, *out_vertex_count);
 }

@@ -377,8 +377,8 @@ b8 shader_system_apply_global() {
 // @brief applies instance scoped uniforms
 // NOTE: operates against the currently-used shader
 // @return true on success, otherwise false
-b8 shader_system_apply_instance() {
-    return renderer_shader_apply_instance(&state_ptr->shaders[state_ptr->current_shader_id]);
+b8 shader_system_apply_instance(b8 needs_update) {
+    return renderer_shader_apply_instance(&state_ptr->shaders[state_ptr->current_shader_id], needs_update);
 }
 
 // @brief binds the instance with the given id for use. must be done before setting instance scoped uniforms

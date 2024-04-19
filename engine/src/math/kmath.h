@@ -591,6 +591,28 @@ KINLINE f32 vec4_dot_f32(
     return p;
 }
 
+// @brief compares all elements of vector_0 and vector_1 and ensures the difference is less than tolerance
+// @param vector_0 the first vector
+// @param vector_1 the second vector
+// @param tolerance the difference tolerance. typically K_FLOAT_EPSILON or similar.
+// @return true if within tolerance. otherwise false
+KINLINE const b8 vec4_compare(vec4 vector_0, vec4 vector_1, f32 tolerance) {
+    if (kabs(vector_0.x - vector_1.x) > tolerance) {
+        return false;
+    }
+    if (kabs(vector_0.y - vector_1.y) > tolerance) {
+        return false;
+    }
+    if (kabs(vector_0.z - vector_1.z) > tolerance) {
+        return false;
+    }
+    if (kabs(vector_0.w - vector_1.w) > tolerance) {
+        return false;
+    }
+
+    return true;
+}
+
 // 4 by 4 matrices ---------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // creates and returns an identity matrix

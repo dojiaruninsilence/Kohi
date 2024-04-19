@@ -213,8 +213,9 @@ KAPI b8 shader_system_apply_global();
 
 // @brief applies instance scoped uniforms
 // NOTE: operates against the currently-used shader
+// @param needs_update indicates if shader internals need to be updated, or just to be bound.
 // @return true on success, otherwise false
-KAPI b8 shader_system_apply_instance();
+KAPI b8 shader_system_apply_instance(b8 needs_update);
 
 // @brief binds the instance with the given id for use. must be done before setting instance scoped uniforms
 // NOTE: operates against the currently-used shader

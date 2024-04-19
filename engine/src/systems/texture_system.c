@@ -12,6 +12,7 @@
 typedef struct texture_system_state {
     texture_system_config config;  // hang on to a copy of the config state
     texture default_texture;
+    texture default_diffuse_texture;
     texture default_specular_texture;
     texture default_normal_texture;
 
@@ -224,6 +225,15 @@ texture* texture_system_get_default_texture() {
     return 0;
 }
 
+texture* texture_system_get_default_diffuse_texture() {
+    if (state_ptr) {
+        return &state_ptr->default_diffuse_texture;
+    }
+
+    KERROR("texture_system_get_default_diffuse_texture called before texture system initialization! Null pointer returned.");
+    return 0;
+}
+
 texture* texture_system_get_default_specular_texture() {
     if (state_ptr) {
         return &state_ptr->default_specular_texture;
@@ -284,6 +294,21 @@ b8 create_default_textures(texture_system_state* state) {
     // manually set the texture generation to invalid since this is a default texture
     state_ptr->default_texture.generation = INVALID_ID;
 
+    // diffuse texture
+    KTRACE("Creating default diffuse textrue...");
+    u8 diff_pixels[16 * 16 * 4];
+    // default diffuse map is all white
+    kset_memory(diff_pixels, 255, sizeof(u8) * 16 * 16 * 4);
+    string_ncopy(state->default_diffuse_texture.name, DEFAULT_DIFFUSE_TEXTURE_NAME, TEXTURE_NAME_MAX_LENGTH);
+    state->default_diffuse_texture.width = 16;
+    state->default_diffuse_texture.height = 16;
+    state->default_diffuse_texture.channel_count = 4;
+    state->default_diffuse_texture.generation = INVALID_ID;
+    state->default_diffuse_texture.has_transparency = false;
+    renderer_create_texture(diff_pixels, &state->default_diffuse_texture);
+    // manually set the texture generation to invalid since this is a default texture
+    state->default_diffuse_texture.generation = INVALID_ID;
+
     // specular texture
     KTRACE("Creating default specular texture...");
     u8 spec_pixels[16 * 16 * 4];
@@ -334,6 +359,7 @@ b8 create_default_textures(texture_system_state* state) {
 void destroy_default_textures(texture_system_state* state) {
     if (state) {
         destroy_texture(&state->default_texture);
+        destroy_texture(&state->default_diffuse_texture);
         destroy_texture(&state->default_specular_texture);
         destroy_texture(&state->default_normal_texture);
     }

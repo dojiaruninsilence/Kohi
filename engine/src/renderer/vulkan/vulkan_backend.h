@@ -55,7 +55,7 @@ b8 vulkan_renderer_shader_bind_globals(struct shader* s);
 b8 vulkan_renderer_shader_bind_instance(struct shader* s, u32 instance_id);
 
 b8 vulkan_renderer_shader_apply_globals(struct shader* s);
-b8 vulkan_renderer_shader_apply_instance(struct shader* s);
+b8 vulkan_renderer_shader_apply_instance(struct shader* s, b8 needs_update);
 
 b8 vulkan_renderer_shader_acquire_instance_resources(struct shader* s, u32* out_instance_id);
 b8 vulkan_renderer_shader_release_instance_resources(struct shader* s, u32 instance_id);
