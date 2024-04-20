@@ -117,6 +117,7 @@ typedef struct renderer_backend {
 
     // @brief applies data for the currently bound instances
     // @param s a pointer to the shader to apply the instance data for
+    // @param needs_update indicates if the shader uniforms need to be updated or just bound
     // @return b8 true on success, otherwise false
     b8 (*shader_apply_instance)(struct shader* s, b8 needs_update);
 

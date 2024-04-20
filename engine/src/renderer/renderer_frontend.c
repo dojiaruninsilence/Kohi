@@ -182,9 +182,7 @@ b8 renderer_draw_frame(render_packet* packet) {
                 m = material_system_get_default();
             }
 
-            // update the material if it hasn't already been this frame. this keeps the same material from being updated
-            // multiple times. it still needs to be bound either way, so this check result gets passed to the backend
-            // which either updates the internal shader bindings and binds temp, or only binds them
+            // apply the material if it hasnt already been this frame. this keeps the same material from being updated many times
             b8 needs_update = m->render_frame_number != state_ptr->backend.frame_number;
             if (!material_system_apply_instance(m, needs_update)) {
                 KWARN("Failed to apply material '%s'. Skipping draw.", m->name);
@@ -233,9 +231,8 @@ b8 renderer_draw_frame(render_packet* packet) {
             } else {
                 m = material_system_get_default();
             }
-            // update the material if it hasn't already been this frame. this keeps the same material from being updated
-            // multiple times. it still needs to be bound either way, so this check result gets passed to the backend
-            // which either updates the internal shader bindings and binds temp, or only binds them
+
+            // apply the material
             b8 needs_update = m->render_frame_number != state_ptr->backend.frame_number;
             if (!material_system_apply_instance(m, needs_update)) {
                 KWARN("Failed to apply UI material '%s'. Skipping draw.", m->name);
