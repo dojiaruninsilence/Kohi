@@ -180,11 +180,11 @@ b8 load_ksm_file(file_handle* ksm_file, geometry_config** out_geometries_darray)
         filesystem_read(ksm_file, sizeof(char) * m_name_length, g.material_name, &bytes_read);
 
         // center
-        filesystem_read(ksm_file, sizeof(vec3), &g.center, &bytes_read);
+        filesystem_read(ksm_file, sizeof(vertex_3d), &g.center, &bytes_read);
 
-        // events (min/max)
-        filesystem_read(ksm_file, sizeof(vec3), &g.min_extents, &bytes_read);
-        filesystem_read(ksm_file, sizeof(vec3), &g.max_extents, &bytes_read);
+        // extents (min/max)
+        filesystem_read(ksm_file, sizeof(vertex_3d), &g.min_extents, &bytes_read);
+        filesystem_read(ksm_file, sizeof(vertex_3d), &g.max_extents, &bytes_read);
 
         // add to the output array
         darray_push(*out_geometries_darray, g);
@@ -245,11 +245,11 @@ b8 write_ksm_file(const char* path, const char* name, u32 geometry_count, geomet
         filesystem_write(&f, sizeof(char) * m_name_length, g->material_name, &written);
 
         // center
-        filesystem_write(&f, sizeof(vec3), &g->center, &written);
+        filesystem_write(&f, sizeof(vertex_3d), &g->center, &written);
 
         // extents (min/max)
-        filesystem_write(&f, sizeof(vec3), &g->min_extents, &written);
-        filesystem_write(&f, sizeof(vec3), &g->max_extents, &written);
+        filesystem_write(&f, sizeof(vertex_3d), &g->min_extents, &written);
+        filesystem_write(&f, sizeof(vertex_3d), &g->max_extents, &written);
     }
 
     filesystem_close(&f);

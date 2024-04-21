@@ -78,6 +78,11 @@
         "string_view": "c",
         "limits": "c",
         "sstream": "c",
-        "filesystem.h": "c"
+        "filesystem.h": "c",
+        "atomic": "c",
+        "*.tcc": "c",
+        "iomanip": "c",
+        "istream": "c",
+        "ostream": "c"        
     }
 }

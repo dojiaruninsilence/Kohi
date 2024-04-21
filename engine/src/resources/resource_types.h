@@ -44,6 +44,9 @@ typedef struct texture {
     u32 height;           // height of the texture
     u8 channel_count;     // how many channels it has (rgba channels)
     b8 has_transparency;  // bool to store whether it has transparencies that need to be considered. alpha channel or not
+
+    // @brief indicates if the texture can be written (rendered) to
+    b8 is_writeable;
     u32 generation;
     char name[TEXTURE_NAME_MAX_LENGTH];
     void* internal_data;  // graphics api specific data
@@ -59,10 +62,37 @@ typedef enum texture_use {
     TEXTURE_USE_MAP_NORMAL = 0x03
 } texture_use;
 
+// @brief represents supported texture filtering modes
+typedef enum texture_filter {
+    // @brief nearest-neighbor filtering
+    TEXTURE_FILTER_MODE_NEAREST = 0x0,
+    // @brief linear (i.e. bilinear) filtering
+    TEXTURE_FILTER_MODE_LINEAR = 0x1
+} texture_filter;
+
+typedef enum texture_repeat {
+    TEXTURE_REPEAT_REPEAT = 0x1,
+    TEXTURE_REPEAT_MIRRORED_REPEAT = 0x2,
+    TEXTURE_REPEAT_CLAMP_TO_EDGE = 0x3,
+    TEXTURE_REPEAT_CLAMP_TO_BORDER = 0x4
+} texture_repeat;
+
 // store data for texture maps
 typedef struct texture_map {
     texture* texture;
     texture_use use;
+    // @brief texture filtering mode for minification
+    texture_filter filter_minify;
+    // @brief texture filtering mode for magnification
+    texture_filter filter_magnify;
+    // @brief the repeat mode on the u axis (or x, or s)
+    texture_repeat repeat_u;
+    // @brief the repeat mode on the v axis (or y, or t)
+    texture_repeat repeat_v;
+    // @brief the repeat mode on the w axis (or z, or u)
+    texture_repeat repeat_w;
+    // @brief a pointer to internal, render api specific data. typically the internal sampler
+    void* internal_data;
 } texture_map;
 
 // define the max length that a material may be named
