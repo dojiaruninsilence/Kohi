@@ -662,7 +662,8 @@ void regenerate_framebuffers() {
     for (u32 i = 0; i < image_count; ++i) {  // iterate through all the swap chain image count. - we need a framebuffer for each swapchain image
         // world framebuffers
         // create and fill out the struct for creating framebuffers, start with default values using the vulkan macro
-        VkImageView world_attachments[2] = {context.swapchain.views[i], context.swapchain.depth_attachment.view};
+        vulkan_image* image = (vulkan_image*)context.swapchain.render_textures[i]->internal_data;
+        VkImageView world_attachments[2] = {image->view, context.swapchain.depth_attachment.view};
         VkFramebufferCreateInfo framebuffer_create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
         framebuffer_create_info.renderPass = context.main_renderpass.handle;
         framebuffer_create_info.attachmentCount = 2;
@@ -675,7 +676,7 @@ void regenerate_framebuffers() {
 
         // swapchain framebuffers (ui pass). outputs to swapchain images
         // create and fill out the struct for creating framebuffers, start with default values using the vulkan macro
-        VkImageView ui_attachments[1] = {context.swapchain.views[i]};
+        VkImageView ui_attachments[1] = {image->view};
         VkFramebufferCreateInfo sc_framebuffer_create_info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
         sc_framebuffer_create_info.renderPass = context.ui_renderpass.handle;
         sc_framebuffer_create_info.attachmentCount = 1;
@@ -812,39 +813,129 @@ b8 create_buffers(vulkan_context* context) {
 
 // create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
 // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
-void vulkan_renderer_create_texture(const u8* pixels, texture* texture) {
+void vulkan_renderer_texture_create(const u8* pixels, texture* t) {
     // internal data creation
     // TODO: use an allocator for this - this will be done with a custom allocator as soon as we have the capability to
-    texture->internal_data = (vulkan_texture_data*)kallocate(sizeof(vulkan_texture_data), MEMORY_TAG_TEXTURE);
-    vulkan_texture_data* data = (vulkan_texture_data*)texture->internal_data;
-    VkDeviceSize image_size = texture->width * texture->height * texture->channel_count;  // this is the number of pixels times the number of channels for those pixels - like the length of the pixels array
+    t->internal_data = (vulkan_image*)kallocate(sizeof(vulkan_image), MEMORY_TAG_TEXTURE);
+    vulkan_image* image = (vulkan_image*)t->internal_data;
+    u32 size = t->width * t->height * t->channel_count;  // this is the number of pixels times the number of channels for those pixels - like the length of the pixels array
 
     // NOTE:  assumes there are 8 bits per channel - there is logic that can detect this, just not going to add it yet
     VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
 
-    // create a staging buffer and load data into it - going to take the data in pixels and load it into vulkan memory
-    VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;                                                           // this indicating that this is a transfer buffer
-    VkMemoryPropertyFlags memory_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;  // use both host visible and coherent memory
-    vulkan_buffer staging;                                                                                                 // define the staging buffer
-    vulkan_buffer_create(&context, image_size, usage, memory_prop_flags, true, false, &staging);                           // create the buffer, give it the context, the image size, what its used for, memory flaga above, immediately bind, and the address for the buffer
+    // NOTE: lots of assumptions here, different texture types will definately require defferent options here
+    vulkan_image_create(
+        &context,
+        VK_IMAGE_TYPE_2D,
+        t->width,
+        t->height,
+        image_format,
+        VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        true,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        image);
 
     // load the data into the buffer, pass it the context, the buffer, starts at the beginning, size is the image size, no flags, and the data is pixels(the image)
-    vulkan_buffer_load_data(&context, &staging, 0, image_size, 0, pixels);
+    vulkan_renderer_texture_write_data(t, 0, size, pixels);
 
-    // NOTE: lots of assumptions here, different texture types will require different options here
+    t->generation++;
+}
+
+void vulkan_renderer_texture_destroy(struct texture* texture) {
+    vkDeviceWaitIdle(context.device.logical_device);
+
+    vulkan_image* image = (vulkan_image*)texture->internal_data;
+    if (image) {
+        vulkan_image_destroy(&context, image);
+        kzero_memory(image, sizeof(vulkan_image));
+
+        kfree(texture->internal_data, sizeof(vulkan_image), MEMORY_TAG_TEXTURE);
+    }
+    kzero_memory(texture, sizeof(struct texture));
+}
+
+VkFormat channel_count_to_format(u8 channel_count, VkFormat default_format) {
+    switch (channel_count) {
+        case 1:
+            return VK_FORMAT_R8_UNORM;
+        case 2:
+            return VK_FORMAT_R8G8_UNORM;
+        case 3:
+            return VK_FORMAT_R8G8B8_UNORM;
+        case 4:
+            return VK_FORMAT_R8G8B8A8_UNORM;
+        default:
+            return default_format;
+    }
+}
+
+void vulkan_renderer_texture_create_writeable(texture* t) {
+    // internal data creation
+    t->internal_data = (vulkan_image*)kallocate(sizeof(vulkan_image), MEMORY_TAG_TEXTURE);
+    vulkan_image* image = (vulkan_image*)t->internal_data;
+
+    VkFormat image_format = channel_count_to_format(t->channel_count, VK_FORMAT_R8G8B8A8_UNORM);
+
+    // TODO:  lots of assumptions here, different texture types will require different options here
     // create a vulkan image - will be making this more dynamic in the future
     vulkan_image_create(
         &context,          // pass in the context
         VK_IMAGE_TYPE_2D,  // is going to be a 2d image
-        texture->width,    // pass in the size
-        texture->height,
+        t->width,          // pass in the size
+        t->height,
         image_format,                                                                                                                          // had coded to rgba 8 bit per channel for now
         VK_IMAGE_TILING_OPTIMAL,                                                                                                               // tiling is optimal
         VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,  // the image is both a transfer sourc and destination, it can be sampled, can be used for a color attachement
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,                                                                                                   // use local device memory faster
         true,                                                                                                                                  // create a view for the image
         VK_IMAGE_ASPECT_COLOR_BIT,                                                                                                             // its a color
-        &data->image);                                                                                                                         // and the address to the image
+        image);                                                                                                                                // and the address to the image
+
+    t->generation++;
+}
+
+void vulkan_renderer_texture_resize(texture* t, u32 new_width, u32 new_height) {
+    if (t && t->internal_data) {
+        // resizing is really jsut destroying the old image and creating a new one. data is not preserved because there is no
+        // reliable way to map the old data to the new since the amount of data differs
+        vulkan_image* image = (vulkan_image*)t->internal_data;
+        vulkan_image_destroy(&context, image);
+
+        VkFormat image_format = channel_count_to_format(t->channel_count, VK_FORMAT_R8G8B8A8_UNORM);
+
+        // TODO:  lots of assumptions here, different texture types will require different options here
+        vulkan_image_create(
+            &context,
+            VK_IMAGE_TYPE_2D,
+            new_width,
+            new_height,
+            image_format,
+            VK_IMAGE_TILING_OPTIMAL,
+            VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            true,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            image);
+
+        t->generation++;
+    }
+}
+
+void vulkan_renderer_texture_write_data(texture* t, u32 offset, u32 size, const u8* pixels) {
+    vulkan_image* image = (vulkan_image*)t->internal_data;
+    VkDeviceSize image_size = t->width * t->height * t->channel_count;
+
+    VkFormat image_format = channel_count_to_format(t->channel_count, VK_FORMAT_R8G8B8A8_UNORM);
+
+    // create a staging buffer and load data into it
+    VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    VkMemoryPropertyFlags memory_prop_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+    vulkan_buffer staging;
+    vulkan_buffer_create(&context, image_size, usage, memory_prop_flags, true, false, &staging);
+
+    vulkan_buffer_load_data(&context, &staging, 0, image_size, 0, pixels);
 
     vulkan_command_buffer temp_buffer;                                                  // define a temprary command buffer
     VkCommandPool pool = context.device.graphics_command_pool;                          // define a graphics command pool
@@ -855,19 +946,19 @@ void vulkan_renderer_create_texture(const u8* pixels, texture* texture) {
     vulkan_image_transition_layout(
         &context,                               // pass in the context
         &temp_buffer,                           // the command buffer just created
-        &data->image,                           // address of the image being transitioned
+        image,                                  // address of the image being transitioned
         image_format,                           // hard coded to rgba 8 bits per channel for now
         VK_IMAGE_LAYOUT_UNDEFINED,              // old layout
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);  // new layout
 
     // copy the data from the buffer - copies the data stored in staging to the image
-    vulkan_image_copy_from_buffer(&context, &data->image, staging.handle, &temp_buffer);
+    vulkan_image_copy_from_buffer(&context, image, staging.handle, &temp_buffer);
 
     // transition from optimal for data receipt to shader read only optimal layout
     vulkan_image_transition_layout(
         &context,
         &temp_buffer,
-        &data->image,
+        image,
         image_format,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,       // these two are only difference from previous call, old layout
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);  // new layout
@@ -878,23 +969,7 @@ void vulkan_renderer_create_texture(const u8* pixels, texture* texture) {
     // destoy the staging buffer, no longer needed
     vulkan_buffer_destroy(&context, &staging);
 
-    texture->generation++;  // incrememnt the generation - how many times this texture has been loaded, or refreshed
-}
-
-// destroy a texture
-void vulkan_renderer_destroy_texture(texture* texture) {
-    vkDeviceWaitIdle(context.device.logical_device);  // make sure that none of this stuff is in use before destoying anything
-
-    vulkan_texture_data* data = (vulkan_texture_data*)texture->internal_data;  // conveneince pointer
-
-    if (data) {
-        vulkan_image_destroy(&context, &data->image);      // destoy the image
-        kzero_memory(&data->image, sizeof(vulkan_image));  // zero out the memory from the image
-
-        kfree(texture->internal_data, sizeof(vulkan_texture_data), MEMORY_TAG_TEXTURE);  // free the kallocate memory for internal data
-    }
-
-    kzero_memory(texture, sizeof(struct texture));  // zero out the memory of the texture
+    t->generation++;  // incrememnt the generation - how many times this texture has been loaded, or refreshed
 }
 
 // create geometry
@@ -1546,9 +1621,9 @@ b8 vulkan_renderer_shader_apply_instance(struct shader* s, b8 needs_update) {
                 // TODO: only update in the list if actually needing an update
                 texture_map* map = internal->instance_states[s->bound_instance_id].instance_texture_maps[i];
                 texture* t = map->texture;
-                vulkan_texture_data* internal_data = (vulkan_texture_data*)t->internal_data;
+                vulkan_image* image = (vulkan_image*)t->internal_data;
                 image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-                image_infos[i].imageView = internal_data->image.view;
+                image_infos[i].imageView = image->view;
                 image_infos[i].sampler = (VkSampler)map->internal_data;
 
                 // TODO: change up descriptor state to handle this properly
@@ -1670,9 +1745,9 @@ b8 vulkan_renderer_shader_acquire_instance_resources(shader* s, texture_map** ma
     // wipe out the memory for the entire array, even if it isnt all used
     instance_state->instance_texture_maps = kallocate(sizeof(texture_map*) * s->instance_texture_count, MEMORY_TAG_ARRAY);
     texture* default_texture = texture_system_get_default_texture();
-    // set all the texture pointers to default until assigned
+    kcopy_memory(instance_state->instance_texture_maps, maps, sizeof(texture_map*) * s->instance_texture_count);
+    // set unassigned the texture pointers to default until assigned
     for (u32 i = 0; i < instance_texture_count; ++i) {
-        instance_state->instance_texture_maps[i] = maps[i];
         if (!maps[i]->texture) {
             instance_state->instance_texture_maps[i]->texture = default_texture;
         }

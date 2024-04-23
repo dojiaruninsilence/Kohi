@@ -42,6 +42,7 @@ b8 create_default_textures(texture_system_state* state);
 void destroy_default_textures(texture_system_state* state);
 b8 load_texture(const char* texture_name, texture* t);
 void destroy_texture(texture* texture);
+b8 process_texture_reference(const char* name, i8 reference_diff, b8 auto_release, b8 skip_load, u32* out_texture_id);
 
 // initialize the texture system- it takes in a pointer to how much memory is required, a pointer to a block of memory, and the texture system configurations
 // this is one of the 2 stage functions, 1st time call with a zero for the block of memory(state), and it will calculate the memory requirements
@@ -102,7 +103,7 @@ void texture_system_shutdown(void* state) {
         for (u32 i = 0; i < state_ptr->config.max_texture_count; ++i) {  // iterate through the entire texture array
             texture* t = &state_ptr->registered_textures[i];
             if (t->generation != INVALID_ID) {  // if there is a registered texture at index i
-                renderer_destroy_texture(t);    // destroy it
+                renderer_texture_destroy(t);    // destroy it
             }
         }
 
@@ -116,140 +117,140 @@ void texture_system_shutdown(void* state) {
 // auto release - if a texture is no longer in use it will be released to free up memory
 texture* texture_system_acquire(const char* name, b8 auto_release) {
     // return default texture, but warn about it since this should be returned via get_default_texturez()
+    // TODO: check against other default texture names?
     if (strings_equali(name, DEFAULT_TEXTURE_NAME)) {  // case insensitive string comparison
         KWARN("texture_system_acquire called for default textur. use texture_system_get_default_texture for texture 'default'.");
         return &state_ptr->default_texture;
     }
 
-    texture_reference ref;  // store a copy to use locally
-
-    if (state_ptr && hashtable_get(&state_ptr->registered_texture_table, name, &ref)) {  // if the state pointer exists and hashtable get succeeds
-        // this can only be changed the first time a texture is loaded
-        if (ref.reference_count == 0) {       // if this is the first time that the texture has been loaded
-            ref.auto_release = auto_release;  // then set the auto release
-        }
-        ref.reference_count++;  // increment the reference count
-        if (ref.handle == INVALID_ID) {
-            // this means that no texture exists here. find a free index first
-            u32 count = state_ptr->config.max_texture_count;               // get the size of the textuer array
-            texture* t = 0;                                                // define a texture to store a new texture in
-            for (u32 i = 0; i < count; ++i) {                              // loop through all of the registered textures
-                if (state_ptr->registered_textures[i].id == INVALID_ID) {  // if a texture id is invalid
-                    // a free slot has been found. use its index as the handle
-                    ref.handle = i;  // set the handle to i
-                    t = &state_ptr->registered_textures[i];
-                    break;
-                }
-            }
-
-            // make sure an empty slot was actually found
-            if (!t || ref.handle == INVALID_ID) {
-                KFATAL("texture_system_acquire - texture system cannot hold anymore textures. adjust configurations to allow more.");
-                return 0;
-            }
-
-            // create a new texture
-            if (!load_texture(name, t)) {
-                KERROR("failed to load texture '%s'.", name);
-                return 0;
-            }
-
-            // also use the handle as the texture id
-            t->id = ref.handle;
-            KTRACE("Texture '%s' does not yet exist. created, and ref_count is now %i.", name, ref.reference_count);
-        } else {
-            KTRACE("Texture '%s' already exists, ref_count increased to %i.", name, ref.reference_count);
-        }
-
-        // update the entry
-        hashtable_set(&state_ptr->registered_texture_table, name, &ref);
-        return &state_ptr->registered_textures[ref.handle];
+    u32 id = INVALID_ID;
+    // NOTE: increments reference count, or creates new entry
+    if (!process_texture_reference(name, 1, auto_release, false, &id)) {
+        KERROR("texture_system_acquire failed to obtain a new texture id.");
+        return 0;
     }
 
-    // NOTE: this would only happen in the event something went wrong with the state
-    KERROR("texture_system_acquire failed to acquire texture '%s'. Null pointer will be returned.", name);
-    return 0;
+    return &state_ptr->registered_textures[id];
+}
+
+texture* texture_system_acquire_writeable(const char* name, u32 width, u32 height, u8 channel_count, b8 has_transparency) {
+    u32 id = INVALID_ID;
+    // NOTE: wrapped textures are never auto released because it means that their
+    // resources are created and managed somewhere within the renderer internals
+    if (!process_texture_reference(name, 1, false, true, &id)) {
+        KERROR("texture_system_aquire_writeable failed to obtain a new texture id.");
+        return 0;
+    }
+
+    texture* t = &state_ptr->registered_textures[id];
+    t->id = id;
+    string_ncopy(t->name, name, TEXTURE_NAME_MAX_LENGTH);
+    t->width = width;
+    t->height = height;
+    t->channel_count = channel_count;
+    t->generation = INVALID_ID;
+    t->flags |= has_transparency ? TEXTURE_FLAG_HAS_TRANSPARENCY : 0;
+    t->flags |= TEXTURE_FLAG_IS_WRITEABLE;
+    t->internal_data = 0;
+    renderer_texture_create_writeable(t);
+    return t;
 }
 
 // release the texture from memory
 void texture_system_release(const char* name) {
     // ignore release requests for the default arrays
+    // TODO: check against other default texture names as well?
     if (strings_equali(name, DEFAULT_TEXTURE_NAME)) {  // case insensitive string comparison
         return;
     }
 
-    texture_reference ref;  // store a copy to use locally
-
-    if (state_ptr && hashtable_get(&state_ptr->registered_texture_table, name, &ref)) {  // if the state pointer exists and hashtable get succeeds
-        if (ref.reference_count == 0) {                                                  // if this is the first time that the texture has been loaded
-            KWARN("Tried to release non-existant texture: '%s'", name);
-            return;
-        }
-
-        // take a copy of the name since it will be wiped out by destroy
-        // (as passed in name is generally a pointer to the actual texture's name)
-        char name_copy[TEXTURE_NAME_MAX_LENGTH];
-        string_ncopy(name_copy, name, TEXTURE_NAME_MAX_LENGTH);
-
-        ref.reference_count--;  // decrement the reference count
-        if (ref.reference_count == 0 && ref.auto_release) {
-            texture* t = &state_ptr->registered_textures[ref.handle];
-
-            // destroy/reset texture
-            destroy_texture(t);
-
-            // reset the reference
-            ref.handle = INVALID_ID;
-            ref.auto_release = false;
-
-            KTRACE("Released texture '%s', Texture unloaded because reference count = 0 and auto_release = true.", name_copy);
-        } else {
-            KTRACE("Released texture '%s', now has a reference count of '%i'(auto_release = %s).", name_copy, ref.reference_count, ref.auto_release ? "true" : "false");
-        }
-
-        // update the entry
-        hashtable_set(&state_ptr->registered_texture_table, name_copy, &ref);
-    } else {
-        KERROR("texture_system_acquire failed to release texture '%s'.", name);
-        return;
+    u32 id = INVALID_ID;
+    // NOTE: decrement the reference count
+    if (!process_texture_reference(name, -1, false, false, &id)) {
+        KERROR("texture_system_release failed to release texture '%s' properly.", name);
     }
 }
 
-// get a pointer to the default texture
-texture* texture_system_get_default_texture() {
-    if (state_ptr) {
-        return &state_ptr->default_texture;
+texture* texture_system_wrap_internal(const char* name, u32 width, u32 height, u8 channel_count, b8 has_transparency, b8 is_writeable, b8 register_texture, void* internal_data) {
+    u32 id = INVALID_ID;
+    texture* t = 0;
+    if (register_texture) {
+        // NOTE: wrapped textures are never auto released because it means that their
+        // resources are created and managed somewhere within the renderer internals
+        if (!process_texture_reference(name, 1, false, true, &id)) {
+            KERROR("texture_system_wrap_internal failed to obtain a new texture id.");
+            return 0;
+        }
+    } else {
+        t = kallocate(sizeof(texture), MEMORY_TAG_TEXTURE);
+        KTRACE("texture_system_wrap_internal created texture '%s', but not registering, resulting in an allocation. It is up to the caller to free this memory.", name);
     }
 
-    KERROR("texture_system_get_default_texture called before texture system initialization! Null pointer returned.");
+    t->id = id;
+    string_ncopy(t->name, name, TEXTURE_NAME_MAX_LENGTH);
+    t->width = width;
+    t->height = height;
+    t->channel_count = channel_count;
+    t->generation = INVALID_ID;
+    t->flags |= has_transparency ? TEXTURE_FLAG_HAS_TRANSPARENCY : 0;
+    t->flags |= is_writeable ? TEXTURE_FLAG_IS_WRITEABLE : 0;
+    t->flags |= TEXTURE_FLAG_IS_WRAPPED;
+    t->internal_data = internal_data;
+    return t;
+}
+
+b8 texture_system_set_internal(texture* t, void* internal_data) {
+    if (t) {
+        t->internal_data = internal_data;
+        t->generation++;
+        return true;
+    }
+    return false;
+}
+
+b8 texture_system_resize(texture* t, u32 width, u32 height, b8 regenerate_internal_data) {
+    if (t) {
+        if (!(t->flags & TEXTURE_FLAG_IS_WRITEABLE)) {
+            KWARN("texture_system_resize should not be called on textures that are not writeable.");
+            return false;
+        }
+        t->width = width;
+        t->height = height;
+        // only allow this for writeable textures that are not wrapped. wrapped textures can call
+        // texture_system_set_internal then call this function to get the above parameter updates
+        // and a generation update
+        if (!(t->flags & TEXTURE_FLAG_IS_WRAPPED) && regenerate_internal_data) {
+            // regenerate internals for the new size
+            renderer_texture_resize(t, width, height);
+            return false;
+        }
+        t->generation++;
+        return true;
+    }
+    return false;
+}
+
+#define RETURN_TEXT_PTR_OR_NULL(texture, func_name)                                              \
+    if (state_ptr) {                                                                             \
+        return &texture;                                                                         \
+    }                                                                                            \
+    KERROR("%s called before texture system initialization! Null pointer returned.", func_name); \
     return 0;
+
+texture* texture_system_get_default_texture() {
+    RETURN_TEXT_PTR_OR_NULL(state_ptr->default_texture, "texture_system_get_default_texture");
 }
 
 texture* texture_system_get_default_diffuse_texture() {
-    if (state_ptr) {
-        return &state_ptr->default_diffuse_texture;
-    }
-
-    KERROR("texture_system_get_default_diffuse_texture called before texture system initialization! Null pointer returned.");
-    return 0;
+    RETURN_TEXT_PTR_OR_NULL(state_ptr->default_diffuse_texture, "texture_system_get_default_diffuse_texture");
 }
 
 texture* texture_system_get_default_specular_texture() {
-    if (state_ptr) {
-        return &state_ptr->default_specular_texture;
-    }
-
-    KERROR("texture_system_get_default_specular_texture called before the texture system initialization! Null pointer returned");
-    return 0;
+    RETURN_TEXT_PTR_OR_NULL(state_ptr->default_specular_texture, "texture_system_get_default_specular_texture");
 }
 
 texture* texture_system_get_default_normal_texture() {
-    if (state_ptr) {
-        return &state_ptr->default_normal_texture;
-    }
-
-    KERROR("texture_system_get_default_normal_texture called before texture system initialization! Null pointer returned.");
-    return 0;
+    RETURN_TEXT_PTR_OR_NULL(state_ptr->default_normal_texture, "texture_system_get_default_normal_texture");
 }
 
 b8 create_default_textures(texture_system_state* state) {
@@ -286,11 +287,10 @@ b8 create_default_textures(texture_system_state* state) {
     state->default_texture.height = tex_dimension;
     state->default_texture.channel_count = 4;
     state->default_texture.generation = INVALID_ID;
-    state->default_texture.has_transparency = false;
-    state->default_texture.is_writeable = false;
+    state->default_texture.flags = 0;
 
     // create the texture
-    renderer_create_texture(pixels, &state->default_texture);
+    renderer_texture_create(pixels, &state->default_texture);
 
     // manually set the texture generation to invalid since this is a default texture
     state->default_texture.generation = INVALID_ID;
@@ -305,9 +305,8 @@ b8 create_default_textures(texture_system_state* state) {
     state->default_diffuse_texture.height = 16;
     state->default_diffuse_texture.channel_count = 4;
     state->default_diffuse_texture.generation = INVALID_ID;
-    state->default_diffuse_texture.has_transparency = false;
-    state->default_diffuse_texture.is_writeable = false;
-    renderer_create_texture(diff_pixels, &state->default_diffuse_texture);
+    state->default_diffuse_texture.flags = 0;
+    renderer_texture_create(diff_pixels, &state->default_diffuse_texture);
     // manually set the texture generation to invalid since this is a default texture
     state->default_diffuse_texture.generation = INVALID_ID;
 
@@ -321,9 +320,8 @@ b8 create_default_textures(texture_system_state* state) {
     state->default_specular_texture.height = 16;
     state->default_specular_texture.channel_count = 4;
     state->default_specular_texture.generation = INVALID_ID;
-    state->default_specular_texture.has_transparency = false;
-    state->default_specular_texture.is_writeable = false;
-    renderer_create_texture(spec_pixels, &state->default_specular_texture);
+    state->default_specular_texture.flags = 0;
+    renderer_texture_create(spec_pixels, &state->default_specular_texture);
     // manually set the texture generation to invalid since this is a default texture
     state->default_specular_texture.generation = INVALID_ID;
 
@@ -350,9 +348,8 @@ b8 create_default_textures(texture_system_state* state) {
     state->default_normal_texture.height = 16;
     state->default_normal_texture.channel_count = 4;
     state->default_normal_texture.generation = INVALID_ID;
-    state->default_normal_texture.has_transparency = false;
-    state->default_normal_texture.is_writeable = false;
-    renderer_create_texture(normal_pixels, &state->default_normal_texture);
+    state->default_normal_texture.flags = 0;
+    renderer_texture_create(normal_pixels, &state->default_normal_texture);
     // manually set the texture generation to invalid since this is a default texture
     state->default_normal_texture.generation = INVALID_ID;
 
@@ -401,11 +398,10 @@ b8 load_texture(const char* texture_name, texture* t) {
     // take a copy of the name
     string_ncopy(temp_texture.name, texture_name, TEXTURE_NAME_MAX_LENGTH);
     temp_texture.generation = INVALID_ID;
-    temp_texture.has_transparency = has_transparency;
-    temp_texture.is_writeable = false;
+    temp_texture.flags = has_transparency ? TEXTURE_FLAG_HAS_TRANSPARENCY : 0;
 
     // aquire internal texture resources and upload to GPU
-    renderer_create_texture(resource_data->pixels, &temp_texture);
+    renderer_texture_create(resource_data->pixels, &temp_texture);
 
     // take a copy of the old texture
     texture old = *t;  // derefence and save to old
@@ -414,7 +410,7 @@ b8 load_texture(const char* texture_name, texture* t) {
     *t = temp_texture;  // dereference and save the temp texture
 
     // destroy the old texture - to avoid leaking resources
-    renderer_destroy_texture(&old);
+    renderer_texture_destroy(&old);
 
     if (current_generation == INVALID_ID) {  // if this is the first one
         t->generation = 0;                   // set generation to 0
@@ -429,10 +425,110 @@ b8 load_texture(const char* texture_name, texture* t) {
 
 void destroy_texture(texture* t) {
     // clean up backend resources
-    renderer_destroy_texture(t);
+    renderer_texture_destroy(t);
 
     kzero_memory(t->name, sizeof(char) * TEXTURE_NAME_MAX_LENGTH);
     kzero_memory(t, sizeof(texture));
     t->id = INVALID_ID;
     t->generation = INVALID_ID;
+}
+
+b8 process_texture_reference(const char* name, i8 reference_diff, b8 auto_release, b8 skip_load, u32* out_texture_id) {
+    *out_texture_id = INVALID_ID;
+    if (state_ptr) {
+        texture_reference ref;
+        if (hashtable_get(&state_ptr->registered_texture_table, name, &ref)) {
+            // if the reference count starts off at zero, one of two things can be true. if incrementing references,
+            // this means the entry is new. if decrementing, then the texture doesnt exist if not auto releasing
+            if (ref.reference_count == 0 && reference_diff > 0) {
+                if (reference_diff > 0) {
+                    // this can only be changed the first time a texture is loaded
+                    ref.auto_release = auto_release;
+                } else {
+                    if (ref.auto_release) {
+                        KWARN("Tried to release non-existent texture: '%s'", name);
+                        return false;
+                    } else {
+                        KWARN("Tried to release a texture where autorelease=false, but references was already 0.");
+                        // still count this as a success but warn about it
+                        return true;
+                    }
+                }
+            }
+
+            ref.reference_count += reference_diff;
+
+            // take a copy of the name since it would be wiped out if destroyed,
+            // (as passed in name is generally a pointer to the actual texture's name)
+            char name_copy[TEXTURE_NAME_MAX_LENGTH];
+
+            // if decrementing this means a release
+            if (reference_diff < 0) {
+                // check if the reference count has reached 0. if it has, and the reference is set to auto release,
+                // destroy the texture
+                if (ref.reference_count == 0 && ref.auto_release) {
+                    texture* t = &state_ptr->registered_textures[ref.handle];
+
+                    // destroy/reset texture
+                    destroy_texture(t);
+
+                    // reset the reference
+                    ref.handle = INVALID_ID;
+                    ref.auto_release = false;
+                    KTRACE("Released texture '%s'., Texture unloaded because reference count=0 and auto_release=true.", name_copy);
+                } else {
+                    KTRACE("Released texture '%s', now has a reference count of '%i' (auto_release=%s).", name_copy, ref.reference_count, ref.auto_release ? "true" : "false");
+                }
+            } else {
+                // incrementing. check if the handle is new or not
+                if (ref.handle == INVALID_ID) {
+                    // this means that no texture exists here. find a free index first
+                    u32 count = state_ptr->config.max_texture_count;
+
+                    for (u32 i = 0; i < count; ++i) {
+                        if (state_ptr->registered_textures[i].id == INVALID_ID) {
+                            // a free slot has been found. use its index as the handle
+                            ref.handle = i;
+                            *out_texture_id = i;
+                            break;
+                        }
+                    }
+
+                    // an empty slot was not found, bleat about it and boot out
+                    if (*out_texture_id == INVALID_ID) {
+                        KFATAL("process_texture_reference - Texture system cannot hold anymore textures. Adjust configuration to allow more.");
+                        return false;
+                    } else {
+                        texture* t = &state_ptr->registered_textures[ref.handle];
+                        // create new texture
+                        if (skip_load) {
+                            KTRACE("Load skipped for texture '%s'. This is expected behaviour.");
+                        } else {
+                            if (!load_texture(name, t)) {
+                                *out_texture_id = INVALID_ID;
+                                KERROR("Failed to load texture '%s'.", name);
+                                return false;
+                            }
+                            t->id = ref.handle;
+                        }
+                        KTRACE("Texture '%s' does not yet exist. Created, and ref_count is now %i.", name, ref.reference_count);
+                    }
+                } else {
+                    *out_texture_id = ref.handle;
+                    KTRACE("Texture '%s' already exists, ref_count increased to %i.", name, ref.reference_count);
+                }
+            }
+
+            // either way, update the entry
+            hashtable_set(&state_ptr->registered_texture_table, name_copy, &ref);
+            return true;
+        }
+
+        // NOTE: this would only happen in the event something went wrong with the state
+        KERROR("process_texture_reference failed to acquire id for name '%s'. INVALID_ID returned.", name);
+        return false;
+    }
+
+    KERROR("process_texture_reference called before texture system is initialized.");
+    return false;
 }

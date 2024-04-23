@@ -66,10 +66,30 @@ typedef struct renderer_backend {
 
     // create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
     // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
-    void (*create_texture)(const u8* pixels, struct texture* texture);
+    void (*texture_create)(const u8* pixels, struct texture* texture);
 
     // destroy a texture
-    void (*destroy_texture)(struct texture* texture);
+    void (*texture_destroy)(struct texture* texture);
+
+    // @brief creates a new writeable texture with no data written to it.
+    // @param t a pointer to the texture to hold the resources
+    void (*texture_create_writeable)(texture* t);
+
+    // @brief resizes a texture. there is no check at this level to see if th e texture is writeable. internal resources are destroyedj
+    // and re created at the new resolution. data is lost and would need to be reloaded
+    // @param t a pointer to the texture to be resized
+    // @param new_width the new width in pixels.
+    // @param new_height the new height in pixels
+    void (*texture_resize)(texture* t, u32 new_width, u32 new_height);
+
+    // @brief writes the given data to the provided texture NOTE: at this level, this can either be writeable
+    // or non writeable texture because this also handles the initial texture load. the texture system itself
+    // should be responsible for blocking write requests for non writeable textures
+    // @param t a pointer to the texture to be written to
+    // @param offset the offset in bytes from the beginning of the data to be written
+    // @param size the number of bytes to be written
+    // @param pixels the raw image data to be written
+    void (*texture_write_data)(texture* t, u32 offset, u32 sizes, const u8* pixels);
 
     // geometry
     b8 (*create_geometry)(geometry* geometry, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices);

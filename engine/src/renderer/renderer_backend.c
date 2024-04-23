@@ -12,10 +12,13 @@ b8 renderer_backend_create(renderer_backend_type type, renderer_backend* out_ren
         out_renderer_backend->end_frame = vulkan_renderer_backend_end_frame;      // pointer to the end frame function
         out_renderer_backend->begin_renderpass = vulkan_renderer_begin_renderpass;
         out_renderer_backend->end_renderpass = vulkan_renderer_end_renderpass;
-        out_renderer_backend->resized = vulkan_renderer_backend_on_resized;         // pointer to the on resized function
-        out_renderer_backend->draw_geometry = vulkan_renderer_draw_geometry;        // pointer to the update object function
-        out_renderer_backend->create_texture = vulkan_renderer_create_texture;      // pointer to the create texture function
-        out_renderer_backend->destroy_texture = vulkan_renderer_destroy_texture;    // pointer to the destroy texture function
+        out_renderer_backend->resized = vulkan_renderer_backend_on_resized;   // pointer to the on resized function
+        out_renderer_backend->draw_geometry = vulkan_renderer_draw_geometry;  // pointer to the update object function
+        out_renderer_backend->texture_create = vulkan_renderer_texture_create;
+        out_renderer_backend->texture_destroy = vulkan_renderer_texture_destroy;
+        out_renderer_backend->texture_create_writeable = vulkan_renderer_texture_create_writeable;
+        out_renderer_backend->texture_resize = vulkan_renderer_texture_resize;
+        out_renderer_backend->texture_write_data = vulkan_renderer_texture_write_data;
         out_renderer_backend->create_geometry = vulkan_renderer_create_geometry;    // pointer to the create geometry function
         out_renderer_backend->destroy_geometry = vulkan_renderer_destroy_geometry;  // pointer to the destroy geometry function
 

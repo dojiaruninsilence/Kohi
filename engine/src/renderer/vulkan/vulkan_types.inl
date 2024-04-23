@@ -107,8 +107,8 @@ typedef struct vulkan_swapchain {
     u8 max_frames_in_flight;          // number of frames that can be rendered to
     VkSwapchainKHR handle;            // handle to the vulkan swap chain - is an extension
     u32 image_count;                  // keep a count of the images
-    VkImage* images;                  // pointer to an array of the images
-    VkImageView* views;               // images arent accessed directly in vulkan instead accessed through views - so every image has an accompanying view
+    // @brief an array of pointers to render targets, which contain swapchain images
+    texture** render_textures;
 
     vulkan_image depth_attachment;  // where to store the info for the depth image
 
@@ -360,8 +360,3 @@ typedef struct vulkan_context {
     i32 (*find_memory_index)(u32 type_filter, u32 property_flags);  // a fuction pointer that takes in a type filter and the property flags - returns a 32 bit int
 
 } vulkan_context;
-
-// where we can store the vulkan specific internal texture data
-typedef struct vulkan_texture_data {
-    vulkan_image image;
-} vulkan_texture_data;

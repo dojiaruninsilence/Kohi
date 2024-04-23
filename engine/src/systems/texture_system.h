@@ -31,8 +31,56 @@ void texture_system_shutdown(void* state);
 // auto release - if a texture is no longer in use it will be released to free up memory
 texture* texture_system_acquire(const char* name, b8 auto_release);
 
+// @brief attempts to acquire a writeable texture with the given name. this does not point to  nor attempt to load a texture file.
+// does also increment the reference counter NOTE: writable textures are not auto released
+// @param name the name of the texture to be acquired
+// @param width the width of the texture in pixels
+// @param height the height of the texture in pixels
+// @param channel_count the number of channels in the texture (typically 4 for rgba)
+// @param has_transparency indicates if the texture will have transparency
+// @return a pointer to the generated texture
+texture* texture_system_acquire_writeable(const char* name, u32 width, u32 height, u8 channel_count, b8 has_transparency);
+
 // release the texture from memory
 void texture_system_release(const char* name);
+
+// @brief wraps the provided internal data in a texture stucture using the parameters provided. this is best used for when the
+// render system creates internal resources and they should be passed off to the texture system. can be looked up by name via
+// the acquire methods NOTE: wrapped textures are not auto released
+// @param name the name of the texture
+// @param width the width of the texture in pixels
+// @param height the height of the texture in pixels
+// @param channel_count the number of channels in the texture (typically 4 for rgba)
+// @param has_transparency indicates if the texture will have transparency
+// @param is_writeable indicates if the texture is writeable
+// @param internal_data a pointer to the internal data to be set on the texture
+// @param register_texture indicates if the texture should be registered with the system
+// @return a pointer to the wrapped texture
+texture* texture_system_wrap_internal(const char* name, u32 width, u32 height, u8 channel_count, b8 has_transparency, b8 is_writeable, b8 register_texture, void* internal_data);
+
+// @brief sets the internal data of a texture. useful for replacing internal data from within the renderer  for wrapped
+// textures for example
+// @param t a pointer to the texture to be updated
+// @param internal_data a pointer to the internal data to be set on the texture
+// @return true on success otherwise false
+b8 texture_system_set_internal(texture* t, void* internal_data);
+
+// @brief sets the internal data of a texture. useful for replacing internal data from within the renderer  for wrapped
+// textures for example
+// @param t a pointer to the texture to be resized
+// @param width the new width in pixels
+// @param height the new height in pixels
+// @param regenerate_internal_data indicates if the internal data should be regenerated
+// @return true on success otherwise false
+b8 texture_system_resize(texture* t, u32 width, u32 height, b8 regenerate_internal_data);
+
+// @brief writes the given data to the provided texture. may only be used on writeable textures
+// @param t a pointer to the texture to be written to
+// @param offset the offset in bytes from the beginning of the data to be written
+// @param size the number of bytes to be written
+// @param data a pointer to the data to be written.
+// @return true on success otherwise false
+b8 texture_system_write_data(texture* t, u32 offset, u32 size, void* data);
 
 // get a pointer to the default texture
 texture* texture_system_get_default_texture();

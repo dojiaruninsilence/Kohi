@@ -23,10 +23,28 @@ b8 renderer_draw_frame(render_packet* packet);
 KAPI void renderer_set_view(mat4 view, vec3 view_position);
 
 // create a texture pass in a pointer to the pixels in a u8 array, that is 8 bits per pixel and an address for the texture struct
-void renderer_create_texture(const u8* pixels, struct texture* texture);
+void renderer_texture_create(const u8* pixels, struct texture* texture);
 
 // destroy a texture
-void renderer_destroy_texture(struct texture* texture);
+void renderer_texture_destroy(struct texture* texture);
+
+// @brief creates a new writeable texture with no data written to it
+// @param t a pointer to the texture to hold the resources
+void renderer_texture_create_writeable(texture* t);
+
+// @brief resizes a texture. there is no check at this level to see if the texture is writeable. internal resources are
+// destroyed and recreated at the new resolution. data is lost and would need to be reloaded
+// @param t a pointer to the texture to be resized
+// @param new_width the width in pixels
+// @param new_height the height in pixels
+void renderer_texture_resize(texture* t, u32 new_width, u32 new_height);
+
+// @brief writes the given data to the provided texture
+// @param t a pointer to the texture to be written to NOTE: must be a writeable texture
+// @param offset the offset in bytes from the beginning of the data to be written
+// @param size the number of bytes to be written
+// @param pixels the raw image data to be written
+void renderer_texture_write_data(texture* t, u32 offset, u32 size, const u8* pixels);
 
 // geometry
 b8 renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices);

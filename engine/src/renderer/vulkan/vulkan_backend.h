@@ -34,10 +34,30 @@ void vulkan_renderer_draw_geometry(geometry_render_data data);
 
 // create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
 // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct
-void vulkan_renderer_create_texture(const u8* pixels, texture* texture);
+void vulkan_renderer_texture_create(const u8* pixels, texture* texture);
 
 // destroy a texture
-void vulkan_renderer_destroy_texture(texture* texture);
+void vulkan_renderer_texture_destroy(texture* texture);
+
+// @brief creates a new writeable texture with no data written to it.
+// @param t a pointer to the texture to hold the resources
+void vulkan_renderer_texture_create_writeable(texture* t);
+
+// @brief resizes a texture. there is no check at this level to see if the texture is writeable. internal resources
+// are destroyed and recreated at the new resolution. data is lost and would need to be reloaded
+// @param t a pointer to the texture to be resized.
+// @param new_width the width in pixels
+// @param new_height the height in pixels
+void vulkan_renderer_texture_resize(texture* t, u32 new_width, u32 new_height);
+
+// @brief writes the given data to the provided texture NOTE: at this level, this can either be writeable
+// or non writeable texture because this also handles the initial texture load. the texture system itself
+// should be responsible for blocking write requests for non writeable textures
+// @param t a pointer to the texture to be written to
+// @param offset the offset in bytes from the beginning of the data to be written
+// @param size the number of bytes to be written
+// @param pixels the raw image data to be written
+void vulkan_renderer_texture_write_data(texture* t, u32 offset, u32 size, const u8* pixels);
 
 // create geometry
 b8 vulkan_renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices);
