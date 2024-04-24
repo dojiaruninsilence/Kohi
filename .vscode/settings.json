@@ -83,6 +83,7 @@
         "*.tcc": "c",
         "iomanip": "c",
         "istream": "c",
-        "ostream": "c"        
+        "ostream": "c",
+        "camera_system.h": "c"       
     }
 }

@@ -17,11 +17,6 @@ void renderer_on_resized(u16 width, u16 height);  // may change the structure of
 // contains all the info that the renderer needs to know to draw that frame
 b8 renderer_draw_frame(render_packet* packet);
 
-// deprecated HACK: this should not be exposed outside the engine
-// @param view the view matrix to be set
-// @param view_position the view position to be set
-KAPI void renderer_set_view(mat4 view, vec3 view_position);
-
 // create a texture pass in a pointer to the pixels in a u8 array, that is 8 bits per pixel and an address for the texture struct
 void renderer_texture_create(const u8* pixels, struct texture* texture);
 

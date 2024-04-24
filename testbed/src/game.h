@@ -3,13 +3,11 @@
 #include <defines.h>
 #include <game_types.h>
 #include <math/math_types.h>
+#include <systems/camera_system.h>
 
 typedef struct game_state {
     f32 delta_time;
-    mat4 view;
-    vec3 camera_position;
-    vec3 camera_euler;
-    b8 camera_view_dirty;
+    camera* world_camera;
 } game_state;
 
 // the names of these do not need to match just the type and the inputs

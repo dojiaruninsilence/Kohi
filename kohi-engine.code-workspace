@@ -62,7 +62,8 @@
 			"vector": "c",
 			"xstring": "c",
 			"xutility": "c",
-			"chrono": "c"
+			"chrono": "c",
+			"kmath.h": "c"
 		}
 	}
 }

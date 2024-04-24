@@ -21,6 +21,7 @@
 #include "systems/geometry_system.h"
 #include "systems/resource_system.h"
 #include "systems/shader_system.h"
+#include "systems/camera_system.h"
 
 // TODO: temp
 #include "math/kmath.h"
@@ -81,6 +82,9 @@ typedef struct application_state {
     // geometry system state allocation
     u64 geometry_system_memory_requirement;  // where the amount of storage that is needed fot the geometry system is stored
     void* geometry_system_state;             // a pointer to where the geometry system state is being stored
+
+    u64 camera_system_memory_requirement;
+    void* camera_system_state;
 
     // TODO: temp
     // darray
@@ -287,6 +291,16 @@ b8 application_create(game* game_inst) {
     if (!geometry_system_initialize(&app_state->geometry_system_memory_requirement, app_state->geometry_system_state, geometry_sys_config)) {  // if it fails
         KFATAL("Failed to initialize geometry system. Application cannot continue");                                                           // throw a fatal error
         return false;                                                                                                                          // and boot out
+    }
+
+    // Camera
+    camera_system_config camera_sys_config;
+    camera_sys_config.max_camera_count = 61;
+    camera_system_initialize(&app_state->camera_system_memory_requirement, 0, camera_sys_config);
+    app_state->camera_system_state = linear_allocator_allocate(&app_state->systems_allocator, app_state->camera_system_memory_requirement);
+    if (!camera_system_initialize(&app_state->camera_system_memory_requirement, app_state->camera_system_state, camera_sys_config)) {
+        KFATAL("Failed to initialize camera system. Application cannot continue.");
+        return false;
     }
 
     // TODO: temp
