@@ -286,6 +286,11 @@ b8 vulkan_device_detect_depth_format(vulkan_device* device) {
                               VK_FORMAT_D32_SFLOAT_S8_UINT,  // 2 component format, 32 signed float bits in the depth component, and 8 unsigned int bits in the stencil component, optionally 24 unused bits
                               VK_FORMAT_D24_UNORM_S8_UINT};  // 2 component format, 32 bit packed format, 8 unsigned int bits in stencil component, and 24 unsigned normalized bits in the depth component
 
+    u8 sizes[3] = {
+        4,
+        4,
+        3};
+
     u32 flags = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;                                    // is a usage on how were going to use the image - depth and stencil buffers are combined
     for (u32 i = 0; i < candidate_count; ++i) {                                                    // iterate through the candidates
         VkFormatProperties properties;                                                             // create a vulkan format properties
@@ -293,9 +298,11 @@ b8 vulkan_device_detect_depth_format(vulkan_device* device) {
 
         if ((properties.linearTilingFeatures & flags) == flags) {  // if it passes either of these checks, use this candidate for the depth buffer
             device->depth_format = candidates[i];
+            device->depth_channel_count = sizes[i];
             return true;
         } else if ((properties.optimalTilingFeatures & flags) == flags) {
             device->depth_format = candidates[i];
+            device->depth_channel_count = sizes[i];
             return true;
         }
     }

@@ -50,20 +50,19 @@ void renderer_texture_write_data(texture* t, u32 offset, u32 size, const u8* pix
 b8 renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices);
 void renderer_destroy_geometry(geometry* geometry);
 
-// @brief obtains the identifier of the renderpass with the given name.
+// @brief obtains a pointer to the renderpass with the given name.
 // @param name the name of the renderpass whose identifier to obtain.
-// @param out_renderpass_id a pointer to hold the renderpass id.
-// @return true if found, otherwise false.
-b8 renderer_renderpass_id(const char* name, u8* out_renderpass_id);
+// @return a pointer to the render pass if found, otherwise 0
+renderpass* renderer_renderpass_get(const char* name);
 
 // @brief creates internal shader resources using the provided parameters.
 // @param s a pointer to the shader.
-// @param renderpass_id the identifier of the renderpass to be associated with the shader.
+// @param pass a pointer to the renderpass to be associated with the shader.
 // @param stage_count the total number of stages.
 // @param stage_filenames an array of shader stage filenames to be loaded. Should align with stages array.
 // @param stages a array of shader_stages indicating what render stages (vertex, fragment, etc.) used in this shader.
 // @return b8 true on success, otherwise false.
-b8 renderer_shader_create(struct shader* s, u8 renderpass_id, u8 stage_count, const char** stage_filenames, shader_stage* stages);
+b8 renderer_shader_create(struct shader* s, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages);
 
 // @brief destroys the given shader and releases any resources held by it.
 // @param s a pointer to the shader to be destroyed.
@@ -131,3 +130,31 @@ b8 renderer_texture_map_acquire_resources(struct texture_map* map);
 // @brief releases internal resources for the given texture map
 // @param map a pointer to the texture map to release from
 void renderer_texture_map_release_resources(struct texture_map* map);
+
+// @brief creates a new render target using the provided data
+// @param attachment_count the number of attachements (texture pointers)
+// @param attachments an array of attachments (texture pointers)
+// @param renderpass a pointer to the renderpass the render target is associated with
+// @param width the width of the render target in pixels
+// @param height the height of the render target in pixels
+// @param out_target a pointer to hold the newly created render targets
+void renderer_render_target_create(u8 attachment_count, texture** attachments, renderpass* pass, u32 width, u32 height, render_target* out_target);
+
+// @brief destroys the provided render target
+// @param target a pointer to the render target to be destroyed
+// @param free_internal_memory indicates if internal memory should be freed
+
+void renderer_render_target_destroy(render_target* target, b8 free_internal_memory);
+
+// @brief creates a new renderpass
+// @param out_renderpass a pointer to the generic renderpass
+// @param depth the depth clear amount
+// @param stencil the sencil clear value
+// @param clear_flags the combined clear flags indicating what kind of clear should take place
+// @param has_prev_pass indicates if there is a previous renderpass
+// @param has_next_pass indicates if there is a next renderpass
+void renderer_renderpass_create(renderpass* out_renderpass, f32 depth, u32 stencil, b8 has_prev_pass, b8 has_next_pass);
+
+// @brief destroys the given renderpass
+// @param pass a pointer to the renderpass to be destroyed
+void renderer_renderpass_destroy(renderpass* pass);

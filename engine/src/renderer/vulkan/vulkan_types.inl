@@ -64,6 +64,8 @@ typedef struct vulkan_device {
     VkPhysicalDeviceMemoryProperties memory;
 
     VkFormat depth_format;  // the depth format of the device
+    // @brief the chosed depth format's number of channels
+    u8 depth_channel_count;
 } vulkan_device;
 
 // where we are going to store the info for vulkan image
@@ -88,13 +90,10 @@ typedef enum vulkan_render_pass_state {
 // where we will hold the data for the vulkan renderpass
 typedef struct vulkan_renderpass {
     VkRenderPass handle;  // store the handle to the vulkan render pass
-    vec4 render_area;     // store info for the render area for the renderpass
-    vec4 clear_colour;    // store the info for the clear color for the renderpass
 
     f32 depth;    // store the info for the renderpass depth
     u32 stencil;  // need to look up, but has something to do with depth
 
-    u8 clear_flags;  // flags to describe how the renderpass will handle clearing the screen
     b8 has_prev_pass;
     b8 has_next_pass;
 
@@ -110,10 +109,12 @@ typedef struct vulkan_swapchain {
     // @brief an array of pointers to render targets, which contain swapchain images
     texture** render_textures;
 
-    vulkan_image depth_attachment;  // where to store the info for the depth image
+    // @brief the depth of the texture
+    texture* depth_texture;
 
-    // framebuffers used for onscreen rendering
-    VkFramebuffer framebuffers[3];  // an array of framebuffers
+    // @brief render targets used for on screen rendering, one per frame.
+    // the images contained in these are created and owned by the swapchain
+    render_target render_targets[3];
 } vulkan_swapchain;
 
 // an enumeration of all the vulkan command buffer states - these are actually changed within vulkan, but we need to keep track of them for the application
@@ -294,6 +295,8 @@ typedef struct vulkan_shader {
 
 } vulkan_shader;
 
+#define VULKAN_MAX_REGISTERED_RENDERPASSES 31
+
 // this is where we hold all of our static data for this renderer
 typedef struct vulkan_context {
     // store the delta time
@@ -322,9 +325,13 @@ typedef struct vulkan_context {
 
     vulkan_device device;  // include the device info in renderer data
 
-    vulkan_swapchain swapchain;         // vulkan swapchain - controls images to be rendered to and presented, hold the images
-    vulkan_renderpass main_renderpass;  // store the main vulkan render pass
-    vulkan_renderpass ui_renderpass;    // store the ui renderpass
+    vulkan_swapchain swapchain;  // vulkan swapchain - controls images to be rendered to and presented, hold the images
+
+    void* renderpass_table_block;
+    hashtable renderpass_table;
+
+    // @brief registered renderpasses
+    renderpass registered_passes[VULKAN_MAX_REGISTERED_RENDERPASSES];
 
     // buffers stuffs
     vulkan_buffer object_vertex_buffer;  // store vertex buffers
@@ -354,9 +361,12 @@ typedef struct vulkan_context {
     // TODO: make dynamic
     vulkan_geometry_data geometries[VULKAN_MAX_GEOMETRY_COUNT];
 
-    // framebuffers used for world rendering, one per frame
-    VkFramebuffer world_framebuffers[3];
+    // @brief render targets used for world rendering. @note one per frame
+    render_target world_render_targets[3];
 
     i32 (*find_memory_index)(u32 type_filter, u32 property_flags);  // a fuction pointer that takes in a type filter and the property flags - returns a 32 bit int
+
+    // @brief a pointer to a function to be called when the backend requires rendertargets to be refreshed/regenerated
+    void (*on_rendertarget_refresh_required)();
 
 } vulkan_context;

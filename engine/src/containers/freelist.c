@@ -31,6 +31,13 @@ void return_node(freelist* list, freelist_node* node);
 void freelist_create(u64 total_size, u64* memory_requirement, void* memory, freelist* out_list) {
     // enough space to hold the state, plus an array for all the nodes
     u64 max_entries = (total_size / sizeof(void*));  // NOTE: this may have a remainder, but that is ok
+
+    // catch an edge case of having a really small amount of memory to manage, and only having a
+    // super small number of entries. Always make sure we have at least a decent amount, like 20 or so.
+    if (max_entries < 20) {
+        max_entries = 20;
+    }
+
     *memory_requirement = sizeof(internal_state) + (sizeof(freelist_node) * max_entries);
     if (!memory) {
         return;
@@ -209,6 +216,13 @@ b8 freelist_resize(freelist* list, u64* memory_requirement, void* new_memory, u6
 
     // enough space to hold the state, plus an array for all nodes
     u64 max_entries = (new_size / sizeof(void*));  // NOTE: this may have a remainder, but thats ok
+
+    // catch an edge case of having a really small amount of memory to manage, and only having a
+    // super small number of entries. Always make sure we have at least a decent amount, like 20 or so.
+    if (max_entries < 20) {
+        max_entries = 20;
+    }
+
     *memory_requirement = sizeof(internal_state) + (sizeof(freelist_node) * max_entries);
     if (!new_memory) {
         return true;

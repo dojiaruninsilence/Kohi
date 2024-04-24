@@ -45,7 +45,7 @@ b8 game_initialize(game* game_inst) {
     game_state* state = (game_state*)game_inst->state;
 
     // define the camera's default position and rotation
-    state->camera_position = (vec3){0, 0, 30.0f};
+    state->camera_position = (vec3){10.5f, 5.0f, 9.5f};
     state->camera_euler = vec3_zero();
 
     // caluculate the initial position of the camera

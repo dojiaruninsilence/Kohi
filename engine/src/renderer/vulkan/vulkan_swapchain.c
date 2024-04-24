@@ -272,6 +272,7 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
     }
 
     // Create depth image and its view
+    vulkan_image* image = kallocate(sizeof(texture), MEMORY_TAG_TEXTURE);
     vulkan_image_create(
         context,                                      // pass in the context
         VK_IMAGE_TYPE_2D,                             // image type is 2d
@@ -283,14 +284,27 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,          // want to use gpu memory
         true,                                         // create a view
         VK_IMAGE_ASPECT_DEPTH_BIT,                    // use this for the depth buffer
-        &swapchain->depth_attachment);                // where all this is stored
+        image);                                       // where all this is stored
+
+    // wrap it in a texture
+    context->swapchain.depth_texture = texture_system_wrap_internal(
+        "__kohi_default_depth_texture__",
+        swapchain_extent.width,
+        swapchain_extent.height,
+        context->device.depth_channel_count,
+        false,
+        true,
+        false,
+        image);
 
     KINFO("Swapchain created successfully");
 }
 
 void destroy(vulkan_context* context, vulkan_swapchain* swapchain) {  // pass in a pointer to the context, and a pointer to the vulkan swapchain struct
     vkDeviceWaitIdle(context->device.logical_device);                 // use the vulkan function to wait until the device is idle
-    vulkan_image_destroy(context, &swapchain->depth_attachment);      // destroy the depth attachment
+    vulkan_image_destroy(context, (vulkan_image*)swapchain->depth_texture->internal_data);
+    kfree(swapchain->depth_texture->internal_data, sizeof(vulkan_image), MEMORY_TAG_TEXTURE);
+    swapchain->depth_texture->internal_data = 0;
 
     // only detroy the views, not the images, since those are owned by the swapchain and are thus destroyed when it is
     for (u32 i = 0; i < swapchain->image_count; ++i) {  // iterate through the views
