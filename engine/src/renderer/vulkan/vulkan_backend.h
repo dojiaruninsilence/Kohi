@@ -22,12 +22,12 @@ b8 vulkan_renderer_backend_begin_frame(renderer_backend* backend, f32 delta_time
 
 // everything that needs to be done to end a frame
 b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time);
-b8 vulkan_renderer_begin_renderpass(struct renderer_backend* backend, renderpass* pass, render_target* target);
-b8 vulkan_renderer_end_renderpass(struct renderer_backend* backend, renderpass* pass);
+b8 vulkan_renderer_renderpass_begin(renderpass* pass, render_target* target);
+b8 vulkan_renderer_renderpass_end(renderpass* pass);
 renderpass* vulkan_renderer_renderpass_get(const char* name);
 
 // update an object using push constants, input a model to upload
-void vulkan_renderer_draw_geometry(geometry_render_data data);
+void vulkan_renderer_draw_geometry(geometry_render_data* data);
 
 // create a texture, pass in a name, is it realeased automatically, the size, how many channels it hase,
 // a pointer to the pixels in a u8 array, that is 8 bits per pixel, does it need transparency, and an address for the texture struct

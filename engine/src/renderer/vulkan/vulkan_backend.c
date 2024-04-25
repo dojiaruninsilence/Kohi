@@ -552,7 +552,7 @@ b8 vulkan_renderer_backend_end_frame(renderer_backend* backend, f32 delta_time) 
 }
 
 // begin a render pass
-b8 vulkan_renderer_begin_renderpass(struct renderer_backend* backend, renderpass* pass, render_target* target) {
+b8 vulkan_renderer_renderpass_begin(renderpass* pass, render_target* target) {
     vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];
 
     // begin the render pass
@@ -596,7 +596,7 @@ b8 vulkan_renderer_begin_renderpass(struct renderer_backend* backend, renderpass
 }
 
 // end a render pass
-b8 vulkan_renderer_end_renderpass(struct renderer_backend* backend, renderpass* pass) {
+b8 vulkan_renderer_renderpass_end(renderpass* pass) {
     vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];
     // end the renderpass
     vkCmdEndRenderPass(command_buffer->handle);
@@ -1062,14 +1062,14 @@ void vulkan_renderer_destroy_geometry(geometry* geometry) {
 }
 
 // update an object using push constants, input a model to upload
-void vulkan_renderer_draw_geometry(geometry_render_data data) {
+void vulkan_renderer_draw_geometry(geometry_render_data* data) {
     // ignore non uploaded geometries
-    if (data.geometry && data.geometry->internal_id == INVALID_ID) {
+    if (data->geometry && data->geometry->internal_id == INVALID_ID) {
         return;
     }
 
     // convenience pointers
-    vulkan_geometry_data* buffer_data = &context.geometries[data.geometry->internal_id];
+    vulkan_geometry_data* buffer_data = &context.geometries[data->geometry->internal_id];
     vulkan_command_buffer* command_buffer = &context.graphics_command_buffers[context.image_index];
 
     // Bind vertex buffer at offset.

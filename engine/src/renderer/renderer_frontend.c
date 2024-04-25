@@ -12,6 +12,7 @@
 #include "systems/material_system.h"
 #include "systems/shader_system.h"
 #include "systems/camera_system.h"
+#include "systems/render_view_system.h"
 
 // TODO: temporary
 #include "core/kstring.h"
@@ -21,16 +22,8 @@
 // where we're going to store all of the info for the renderer systems state
 typedef struct renderer_system_state {
     renderer_backend backend;  // store the renderer backend
-    camera* active_world_camera;
-    mat4 projection;  // store the projection matrix
-    vec4 ambient_colour;
-    mat4 ui_projection;  // store the projection matrix for the ui
-    mat4 ui_view;        // store a calculated view matrix for the ui
-    f32 near_clip;       // hang on to the near_clip value
-    f32 far_clip;        // hang on to the far_clip value
     u32 material_shader_id;
     u32 ui_shader_id;
-    u32 render_mode;
     // the number of render targets. typically lines up with the amount of swapchain images
     u8 window_render_target_count;
     // the current window framebuffer width
@@ -52,33 +45,6 @@ typedef struct renderer_system_state {
 static renderer_system_state* state_ptr;
 
 void regenerate_render_targets();
-
-b8 renderer_on_event(u16 code, void* sender, void* listener_inst, event_context context) {
-    switch (code) {
-        case EVENT_CODE_SET_RENDER_MODE: {
-            renderer_system_state* state = (renderer_system_state*)listener_inst;
-            i32 mode = context.data.i32[0];
-            switch (mode) {
-                default:
-                case RENDERER_VIEW_MODE_DEFAULT:
-                    KDEBUG("Renderer mode set to default.");
-                    state->render_mode = RENDERER_VIEW_MODE_DEFAULT;
-                    break;
-                case RENDERER_VIEW_MODE_LIGHTING:
-                    KDEBUG("Renderer mode set to lighting.");
-                    state->render_mode = RENDERER_VIEW_MODE_LIGHTING;
-                    break;
-                case RENDERER_VIEW_MODE_NORMALS:
-                    KDEBUG("Renderer mode set to normals.");
-                    state->render_mode = RENDERER_VIEW_MODE_NORMALS;
-                    break;
-            }
-            return true;
-        }
-    }
-
-    return false;
-}
 
 #define CRITICAL_INIT(op, msg) \
     if (!op) {                 \
@@ -104,9 +70,6 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     // TODO: this needs to be made configurable
     renderer_backend_create(RENDERER_BACKEND_TYPE_VULKAN, &state_ptr->backend);  // create the renderer back end, hard coded to vulcan for now and an address to the backend created above
     state_ptr->backend.frame_number = 0;                                         // zero out the frame number
-    state_ptr->render_mode = RENDERER_VIEW_MODE_DEFAULT;
-
-    event_register(EVENT_CODE_SET_RENDER_MODE, state, renderer_on_event);
 
     renderer_backend_config renderer_config = {};
     renderer_config.application_name = application_name;
@@ -181,20 +144,6 @@ b8 renderer_system_initialize(u64* memory_requirement, void* state, const char* 
     resource_system_unload(&config_resource);
     state_ptr->ui_shader_id = shader_system_get_id(BUILTIN_SHADER_NAME_UI);
 
-    // world projection and view
-    // define the near and far clip
-    state_ptr->near_clip = 0.1f;
-    state_ptr->far_clip = 1000.0f;
-    // define default values for the projection matrix - using a perspective style matrix
-    state_ptr->projection = mat4_perspective(deg_to_rad(45.0f), 1280 / 720.0f, state_ptr->near_clip, state_ptr->far_clip);
-
-    // TODO: obtain from the scene
-    state_ptr->ambient_colour = (vec4){0.25f, 0.25f, 0.25f, 1.0f};
-
-    // ui projection and view
-    state_ptr->ui_projection = mat4_orthographic(0, 1280.0f, 720.0f, 0, -100.0f, 100.0f);  // intentionally flipped on the y axis
-    state_ptr->ui_view = mat4_inverse(mat4_identity());
-
     return true;
 }
 
@@ -239,8 +188,7 @@ b8 renderer_draw_frame(render_packet* packet) {
         if (state_ptr->frames_since_resize >= 30) {
             f32 width = state_ptr->framebuffer_width;
             f32 height = state_ptr->framebuffer_height;
-            state_ptr->projection = mat4_perspective(deg_to_rad(45.0f), width / (f32)height, state_ptr->near_clip, state_ptr->far_clip);
-            state_ptr->ui_projection = mat4_orthographic(0, (f32)width, (f32)height, 0, -100.f, 100.0f);  // intentionally flipped on y axis
+            render_view_system_on_window_resize(width, height);
             state_ptr->backend.resized(&state_ptr->backend, width, height);
 
             state_ptr->frames_since_resize = 0;
@@ -251,124 +199,16 @@ b8 renderer_draw_frame(render_packet* packet) {
         }
     }
 
-    // TODO: views
-    // update the main/world renderpass dimensions
-    state_ptr->world_renderpass->render_area.z = state_ptr->framebuffer_width;
-    state_ptr->world_renderpass->render_area.w = state_ptr->framebuffer_height;
-
-    // alse update the ui renderpass dimensions
-    state_ptr->ui_renderpass->render_area.z = state_ptr->framebuffer_width;
-    state_ptr->ui_renderpass->render_area.w = state_ptr->framebuffer_height;
-
-    if (!state_ptr->active_world_camera) {
-        // just grab the default camera
-        state_ptr->active_world_camera = camera_system_get_default();
-    }
-
-    mat4 view = camera_view_get(state_ptr->active_world_camera);
-
     // if the begin frame returned successfully, mid-frame operations may continue
     if (state_ptr->backend.begin_frame(&state_ptr->backend, packet->delta_time)) {  // call backend begin frame pointer function, pass in the delta time from the packet
         u8 attachment_index = state_ptr->backend.window_attachment_index_get();
 
-        // world renderpass
-        if (!state_ptr->backend.begin_renderpass(&state_ptr->backend, state_ptr->world_renderpass, &state_ptr->world_renderpass->targets[attachment_index])) {
-            KERROR("backend.begin_renderpass -> BUILTIN_RENDERPASS_WORLD failed. Application shutting down...");
-            return false;
-        }
-
-        if (!shader_system_use_by_id(state_ptr->material_shader_id)) {
-            KERROR("Failed to use material shader. Render frame failed.");
-            return false;
-        }
-
-        // apply globals
-        if (!material_system_apply_global(state_ptr->material_shader_id, &state_ptr->projection, &view, &state_ptr->ambient_colour, &state_ptr->active_world_camera->position, state_ptr->render_mode)) {
-            KERROR("Failed to use apply globals for material shader. Render frame failed.");
-            return false;
-        }
-
-        // draw geometries.
-        u32 count = packet->geometry_count;
-        for (u32 i = 0; i < count; ++i) {
-            material* m = 0;
-            if (packet->geometries[i].geometry->material) {
-                m = packet->geometries[i].geometry->material;
-            } else {
-                m = material_system_get_default();
+        // render each view
+        for (u32 i = 0; i < packet->view_count; ++i) {
+            if (!render_view_system_on_render(packet->views[i].view, &packet->views[i], state_ptr->backend.frame_number, attachment_index)) {
+                KERROR("Error rendering view index %i.", i);
+                return false;
             }
-
-            // apply the material if it hasnt already been this frame. this keeps the same material from being updated many times
-            b8 needs_update = m->render_frame_number != state_ptr->backend.frame_number;
-            if (!material_system_apply_instance(m, needs_update)) {
-                KWARN("Failed to apply material '%s'. Skipping draw.", m->name);
-                continue;
-            } else {
-                // sync the frame number
-                m->render_frame_number = state_ptr->backend.frame_number;
-            }
-
-            // apply the locals
-            material_system_apply_local(m, &packet->geometries[i].model);
-
-            // draw it
-            state_ptr->backend.draw_geometry(packet->geometries[i]);
-        }
-
-        // end the world renderpass
-        if (!state_ptr->backend.end_renderpass(&state_ptr->backend, state_ptr->world_renderpass)) {
-            KERROR("backend.end_renderpass -> BUILTIN_RENDERPASS_WORLD failed. Application shutting down...");
-            return false;
-        }
-
-        // ui renderpass
-        if (!state_ptr->backend.begin_renderpass(&state_ptr->backend, state_ptr->ui_renderpass, &state_ptr->ui_renderpass->targets[attachment_index])) {
-            KERROR("backend.begin_renderpass -> BUILTIN_RENDERPASS_UI failed. Application shutting down...");
-            return false;
-        }
-
-        if (!shader_system_use_by_id(state_ptr->ui_shader_id)) {
-            KERROR("Failed to use UI shader. Render frame failed.");
-            return false;
-        }
-
-        // apply globals
-        if (!material_system_apply_global(state_ptr->ui_shader_id, &state_ptr->ui_projection, &state_ptr->ui_view, 0, 0, 0)) {
-            KERROR("Failed to use apply globals for UI shader. Render frame failed.");
-            return false;
-        }
-
-        // draw ui geometries.
-        count = packet->ui_geometry_count;
-        for (u32 i = 0; i < count; ++i) {
-            material* m = 0;
-            if (packet->ui_geometries[i].geometry->material) {
-                m = packet->ui_geometries[i].geometry->material;
-            } else {
-                m = material_system_get_default();
-            }
-
-            // apply the material
-            b8 needs_update = m->render_frame_number != state_ptr->backend.frame_number;
-            if (!material_system_apply_instance(m, needs_update)) {
-                KWARN("Failed to apply UI material '%s'. Skipping draw.", m->name);
-                continue;
-            } else {
-                // Sync the frame number.
-                m->render_frame_number = state_ptr->backend.frame_number;
-            }
-
-            // apply the locals
-            material_system_apply_local(m, &packet->ui_geometries[i].model);
-
-            // draw it
-            state_ptr->backend.draw_geometry(packet->ui_geometries[i]);
-        }
-
-        // end the ui renderpass
-        if (!state_ptr->backend.end_renderpass(&state_ptr->backend, state_ptr->ui_renderpass)) {
-            KERROR("backend.end_renderpass -> BUILTIN_RENDERPASS_UI failed. Application shutting down...");
-            return false;
         }
 
         // end the frame if this fails, it is likely unrecoverable
@@ -412,6 +252,18 @@ b8 renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_coun
 
 void renderer_destroy_geometry(geometry* geometry) {
     state_ptr->backend.destroy_geometry(geometry);
+}
+
+void renderer_draw_geometry(geometry_render_data* data) {
+    state_ptr->backend.draw_geometry(data);
+}
+
+b8 renderer_renderpass_begin(renderpass* pass, render_target* target) {
+    return state_ptr->backend.renderpass_begin(pass, target);
+}
+
+b8 renderer_renderpass_end(renderpass* pass) {
+    return state_ptr->backend.renderpass_end(pass);
 }
 
 renderpass* renderer_renderpass_get(const char* name) {

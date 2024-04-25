@@ -45,6 +45,21 @@ void renderer_texture_write_data(texture* t, u32 offset, u32 size, const u8* pix
 b8 renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vertex_count, const void* vertices, u32 index_size, u32 index_count, const void* indices);
 void renderer_destroy_geometry(geometry* geometry);
 
+// @brief draws the given geometry. should only be called inside a renderpass, within a frame
+// @param data the render data of the geometry to be drawn
+void renderer_draw_geometry(geometry_render_data* data);
+
+// @brief begins the given renderpass
+// @param pass a pointer to the renderpass to begin
+// @param target a pointer to the render target to be used
+// @return true on success, otherwise false
+b8 renderer_renderpass_begin(renderpass* pass, render_target* target);
+
+// @brief ends the given renderpass
+// @param pass a pointer to the render target to be used
+// @return true on success, otherwise false
+b8 renderer_renderpass_end(renderpass* pass);
+
 // @brief obtains a pointer to the renderpass with the given name.
 // @param name the name of the renderpass whose identifier to obtain.
 // @return a pointer to the render pass if found, otherwise 0
