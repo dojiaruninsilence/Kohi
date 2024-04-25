@@ -64,7 +64,7 @@ b8 geometry_system_initialize(u64* memory_requirement, void* state, geometry_sys
     for (u32 i = 0; i < count; ++i) {  // iterate through the entire geometry array and pass in an invalid id
         state_ptr->registered_geometries[i].geometry.id = INVALID_ID;
         state_ptr->registered_geometries[i].geometry.internal_id = INVALID_ID;
-        state_ptr->registered_geometries[i].geometry.generation = INVALID_ID;
+        state_ptr->registered_geometries[i].geometry.generation = INVALID_ID_U16;
     }
 
     // create the default geometry - throw fatal if it fails
@@ -198,11 +198,16 @@ b8 create_geometry(geometry_system_state* state, geometry_config config, geometr
         state->registered_geometries[g->id].reference_count = 0;
         state->registered_geometries[g->id].auto_release = false;
         g->id = INVALID_ID;
-        g->generation = INVALID_ID;
+        g->generation = INVALID_ID_U16;
         g->internal_id = INVALID_ID;
 
         return false;
     }
+
+    // copy over extents, center, ect
+    g->center = config.center;
+    g->extents.min = config.min_extents;
+    g->extents.max = config.max_extents;
 
     // acquire the material
     if (string_length(config.material_name) > 0) {
@@ -218,7 +223,7 @@ b8 create_geometry(geometry_system_state* state, geometry_config config, geometr
 void destroy_geometry(geometry_system_state* state, geometry* g) {
     renderer_destroy_geometry(g);
     g->internal_id = INVALID_ID;
-    g->generation = INVALID_ID;
+    g->generation = INVALID_ID_U16;
     g->id = INVALID_ID;
 
     string_empty(g->name);
@@ -474,6 +479,17 @@ geometry_config geometry_system_generate_cube_config(f32 width, f32 height, f32 
     f32 min_uvy = 0.0f;
     f32 max_uvx = tile_x;
     f32 max_uvy = tile_y;
+
+    config.min_extents.x = min_x;
+    config.min_extents.y = min_y;
+    config.min_extents.z = min_z;
+    config.max_extents.x = max_x;
+    config.min_extents.y = max_y;
+    config.min_extents.z = max_z;
+    // alwaus 0 since min/max of each axis are -/+ half of the size
+    config.center.x = 0;
+    config.center.y = 0;
+    config.center.z = 0;
 
     vertex_3d verts[24];
 

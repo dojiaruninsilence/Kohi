@@ -155,7 +155,13 @@ typedef struct material {
 typedef struct geometry {
     u32 id;           // unique id
     u32 internal_id;  // renderer specific id
-    u32 generation;   // track any time it is updated
+    // @brief the geometry generation. increments every time the geometry changes
+    u16 generation;
+    // @brief the center of the geometry in local coordinates
+    vec3 center;
+    // @brief the extents of the geometry in local coordinates
+    extents_3d extents;
+    // @brief the geometry name
     char name[GEOMETRY_NAME_MAX_LENGTH];
     material* material;
 } geometry;

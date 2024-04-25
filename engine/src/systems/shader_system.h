@@ -126,6 +126,9 @@ typedef struct shader {
     // @brief the size of all attributes combined, aka the size of the vertex
     u16 attribute_stride;
 
+    // @brief used to ensure the shader's globals are only updated once per frame
+    u64 render_frame_number;
+
     // @brief an opaque pointer to hold renderer api specific data. renderer is responsible for creation and destruction of this
     void* internal_data;
 } shader;

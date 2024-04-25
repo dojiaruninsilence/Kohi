@@ -435,6 +435,19 @@ KINLINE f32 vec3_distance(vec3 vector_0, vec3 vector_1) {
     return vec3_length(d);                     // then use our function to get the length of d
 }
 
+// @brief transforms v by m. NOTE: it is assumed by this function that the vector v is a point, not a direction,
+// and is calculated as if a w component with a value of 1.0f is there
+// @param v the vector to transform
+// @param m the matrix to transform by
+// @return a transformed copy of v
+KINLINE vec3 vec3_transform(vec3 v, mat4 m) {
+    vec3 out;
+    out.x = v.x * m.data[0 + 0] + v.y * m.data[4 + 0] + v.z * m.data[8 + 0] + 1.0f * m.data[12 + 0];
+    out.y = v.x * m.data[0 + 1] + v.y * m.data[4 + 1] + v.z * m.data[8 + 1] + 1.0f * m.data[12 + 1];
+    out.z = v.x * m.data[0 + 2] + v.y * m.data[4 + 2] + v.z * m.data[8 + 2] + 1.0f * m.data[12 + 2];
+    return out;
+}
+
 // vector 4 --------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 // @brief creates and returns a new 4 element vector using the supplied values

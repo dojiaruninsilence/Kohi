@@ -71,6 +71,22 @@ typedef union mat4_u {
     f32 data[16];  // align memory for a 16 element floating point array, call it data - for a 4 by 4 matrix
 } mat4;
 
+// @brief represents the extents of a 2d object
+typedef struct extents_2d {
+    // @brief the minimum extents of the object
+    vec2 min;
+    // @brief the maximum extents of the object
+    vec2 max;
+} extents_2d;
+
+// @brief represents the extents of a 3d object
+typedef struct extents_3d {
+    // @brief the minimum extents of the object
+    vec3 min;
+    // @brief the maximum extents of the object
+    vec3 max;
+} extents_3d;
+
 // vertex is an individual point of geometry, that holds various bits of information, not only position, but texture mappinc coords, color, ect -
 // these want to be in this order everywhere the are used
 typedef struct vertex_3d {
