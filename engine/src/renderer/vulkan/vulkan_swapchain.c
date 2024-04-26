@@ -274,8 +274,8 @@ void create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* sw
     // Create depth image and its view
     vulkan_image* image = kallocate(sizeof(texture), MEMORY_TAG_TEXTURE);
     vulkan_image_create(
-        context,                                      // pass in the context
-        VK_IMAGE_TYPE_2D,                             // image type is 2d
+        context,  // pass in the context
+        TEXTURE_TYPE_2D,
         swapchain_extent.width,                       // pass in extent width
         swapchain_extent.height,                      // pass in extent height
         context->device.depth_format,                 // pass in the depth format from the device

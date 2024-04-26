@@ -343,12 +343,6 @@ void vulkan_renderer_backend_shutdown(renderer_backend* backend) {
     darray_destroy(context.graphics_command_buffers);  // destroy the darray
     context.graphics_command_buffers = 0;              // set the command buffers to zero
 
-    // destroy the render targets
-    for (u32 i = 0; i < context.swapchain.image_count; ++i) {  // iterate through the swapchain images
-        vulkan_renderer_render_target_destroy(&context.world_render_targets[i], true);
-        vulkan_renderer_render_target_destroy(&context.swapchain.render_targets[i], true);
-    }
-
     // destroy renderpasses
     for (u32 i = 0; i < VULKAN_MAX_REGISTERED_RENDERPASSES; ++i) {
         if (context.registered_passes[i].id != INVALID_ID_U16) {
@@ -575,6 +569,9 @@ b8 vulkan_renderer_renderpass_begin(renderpass* pass, render_target* target) {
     if (do_clear_colour) {
         kcopy_memory(clear_values[begin_info.clearValueCount].color.float32, pass->clear_colour.elements, sizeof(f32) * 4);
         begin_info.clearValueCount++;
+    } else {
+        // still add it anyway, but dont bother copying data since it will be ignored
+        begin_info.clearValueCount++;
     }
 
     b8 do_clear_depth = (pass->clear_flags & RENDERPASS_CLEAR_DEPTH_BUFFER_FLAG) != 0;
@@ -795,7 +792,7 @@ void vulkan_renderer_texture_create(const u8* pixels, texture* t) {
     // NOTE: lots of assumptions here, different texture types will definately require defferent options here
     vulkan_image_create(
         &context,
-        VK_IMAGE_TYPE_2D,
+        t->type,
         t->width,
         t->height,
         image_format,
@@ -850,9 +847,9 @@ void vulkan_renderer_texture_create_writeable(texture* t) {
     // TODO:  lots of assumptions here, different texture types will require different options here
     // create a vulkan image - will be making this more dynamic in the future
     vulkan_image_create(
-        &context,          // pass in the context
-        VK_IMAGE_TYPE_2D,  // is going to be a 2d image
-        t->width,          // pass in the size
+        &context,  // pass in the context
+        t->type,   // is going to be a 2d image
+        t->width,  // pass in the size
         t->height,
         image_format,                                                                                                                          // had coded to rgba 8 bit per channel for now
         VK_IMAGE_TILING_OPTIMAL,                                                                                                               // tiling is optimal
@@ -877,7 +874,7 @@ void vulkan_renderer_texture_resize(texture* t, u32 new_width, u32 new_height) {
         // TODO:  lots of assumptions here, different texture types will require different options here
         vulkan_image_create(
             &context,
-            VK_IMAGE_TYPE_2D,
+            t->type,
             new_width,
             new_height,
             image_format,
@@ -894,7 +891,7 @@ void vulkan_renderer_texture_resize(texture* t, u32 new_width, u32 new_height) {
 
 void vulkan_renderer_texture_write_data(texture* t, u32 offset, u32 size, const u8* pixels) {
     vulkan_image* image = (vulkan_image*)t->internal_data;
-    VkDeviceSize image_size = t->width * t->height * t->channel_count;
+    VkDeviceSize image_size = t->width * t->height * t->channel_count * (t->type == TEXTURE_TYPE_CUBE ? 6 : 1);
 
     VkFormat image_format = channel_count_to_format(t->channel_count, VK_FORMAT_R8G8B8A8_UNORM);
 
@@ -913,7 +910,8 @@ void vulkan_renderer_texture_write_data(texture* t, u32 offset, u32 size, const 
 
     // transition the layout from whatever it is currently to optimal for recieving data
     vulkan_image_transition_layout(
-        &context,                               // pass in the context
+        &context,  // pass in the context
+        t->type,
         &temp_buffer,                           // the command buffer just created
         image,                                  // address of the image being transitioned
         image_format,                           // hard coded to rgba 8 bits per channel for now
@@ -921,11 +919,12 @@ void vulkan_renderer_texture_write_data(texture* t, u32 offset, u32 size, const 
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);  // new layout
 
     // copy the data from the buffer - copies the data stored in staging to the image
-    vulkan_image_copy_from_buffer(&context, image, staging.handle, &temp_buffer);
+    vulkan_image_copy_from_buffer(&context, t->type, image, staging.handle, &temp_buffer);
 
     // transition from optimal for data receipt to shader read only optimal layout
     vulkan_image_transition_layout(
         &context,
+        t->type,
         &temp_buffer,
         image,
         image_format,
@@ -1093,13 +1092,7 @@ const u32 DESC_SET_INDEX_GLOBAL = 0;
 // the index of the instance descriptor set
 const u32 DESC_SET_INDEX_INSTANCE = 1;
 
-// the index of the ubo binding
-const u32 BINDING_INDEX_UBO = 0;
-
-// the index of the image sampler binding
-const u32 BINDING_INDEX_SAMPLER = 1;
-
-b8 vulkan_renderer_shader_create(shader* shader, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages) {
+b8 vulkan_renderer_shader_create(shader* shader, const shader_config* config, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages) {
     shader->internal_data = kallocate(sizeof(vulkan_shader), MEMORY_TAG_RENDERER);
 
     // translate stages
@@ -1172,39 +1165,101 @@ b8 vulkan_renderer_shader_create(shader* shader, renderpass* pass, u8 stage_coun
 
     // zero out the arrays and counts
     kzero_memory(out_shader->config.descriptor_sets, sizeof(vulkan_descriptor_set_config) * 2);
+    out_shader->config.descriptor_sets[0].sampler_binding_index = INVALID_ID_U8;
+    out_shader->config.descriptor_sets[1].sampler_binding_index = INVALID_ID_U8;
 
     // attributes array
     kzero_memory(out_shader->config.attributes, sizeof(VkVertexInputAttributeDescription) * VULKAN_SHADER_MAX_ATTRIBUTES);
+
+    // get the uniform counts
+    out_shader->global_uniform_count = 0;
+    out_shader->global_uniform_sampler_count = 0;
+    out_shader->instance_uniform_count = 0;
+    out_shader->instance_uniform_sampler_count = 0;
+    out_shader->local_uniform_count = 0;
+    u32 total_count = darray_length(config->uniforms);
+    for (u32 i = 0; i < total_count; ++i) {
+        switch (config->uniforms[i].scope) {
+            case SHADER_SCOPE_GLOBAL:
+                if (config->uniforms[i].type == SHADER_UNIFORM_TYPE_SAMPLER) {
+                    out_shader->global_uniform_sampler_count++;
+                } else {
+                    out_shader->global_uniform_count++;
+                }
+                break;
+
+            case SHADER_SCOPE_INSTANCE:
+                if (config->uniforms[i].type == SHADER_UNIFORM_TYPE_SAMPLER) {
+                    out_shader->instance_uniform_sampler_count++;
+                } else {
+                    out_shader->instance_uniform_count++;
+                }
+                break;
+            case SHADER_SCOPE_LOCAL:
+                out_shader->local_uniform_count++;
+                break;
+        }
+    }
 
     // for now, shaders will only ever have these 2 types of descriptor pools
     out_shader->config.pool_sizes[0] = (VkDescriptorPoolSize){VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1024};          // HACK: max number of ubo descriptor sets
     out_shader->config.pool_sizes[1] = (VkDescriptorPoolSize){VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1024};  // HACK: max number of image sampler descriptor sets
 
-    // global descriptor set config
-    vulkan_descriptor_set_config global_descriptor_set_config = {};
+    if (out_shader->global_uniform_count > 0 || out_shader->global_uniform_sampler_count > 0) {
+        // global descriptor set config
+        vulkan_descriptor_set_config* set_config = &out_shader->config.descriptor_sets[out_shader->config.descriptor_set_count];
 
-    // ubo is always available and first
-    global_descriptor_set_config.bindings[BINDING_INDEX_UBO].binding = BINDING_INDEX_UBO;
-    global_descriptor_set_config.bindings[BINDING_INDEX_UBO].descriptorCount = 1;
-    global_descriptor_set_config.bindings[BINDING_INDEX_UBO].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    global_descriptor_set_config.bindings[BINDING_INDEX_UBO].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    global_descriptor_set_config.binding_count++;
+        // global ubo binding is first, if present
+        if (out_shader->global_uniform_count > 0) {
+            u8 binding_index = set_config->binding_count;
+            set_config->bindings[binding_index].binding = binding_index;
+            set_config->bindings[binding_index].descriptorCount = 1;
+            set_config->bindings[binding_index].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            set_config->bindings[binding_index].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+            set_config->binding_count++;
+        }
 
-    out_shader->config.descriptor_sets[DESC_SET_INDEX_GLOBAL] = global_descriptor_set_config;
-    out_shader->config.descriptor_set_count++;
-    if (shader->use_instances) {
-        // if using instances, add a second descriptor set
-        vulkan_descriptor_set_config instance_descriptor_set_config = {};
+        // add a binding for samplers if used
+        if (out_shader->global_uniform_sampler_count > 0) {
+            u8 binding_index = set_config->binding_count;
+            set_config->bindings[binding_index].binding = binding_index;
+            set_config->bindings[binding_index].descriptorCount = out_shader->global_uniform_sampler_count;  // one descriptor per sampler
+            set_config->bindings[binding_index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            set_config->bindings[binding_index].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+            set_config->sampler_binding_index = binding_index;
+            set_config->binding_count++;
+        }
 
-        // add a ubo to it, as instances should always have one available
-        // NOTE: might be a good ideah to only add this if it is going to be used
-        instance_descriptor_set_config.bindings[BINDING_INDEX_UBO].binding = BINDING_INDEX_UBO;
-        instance_descriptor_set_config.bindings[BINDING_INDEX_UBO].descriptorCount = 1;
-        instance_descriptor_set_config.bindings[BINDING_INDEX_UBO].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        instance_descriptor_set_config.bindings[BINDING_INDEX_UBO].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-        instance_descriptor_set_config.binding_count++;
+        // increment the set counter
+        out_shader->config.descriptor_set_count++;
+    }
 
-        out_shader->config.descriptor_sets[DESC_SET_INDEX_INSTANCE] = instance_descriptor_set_config;
+    // if using instance uniforms, add a ubo descriptor set
+    if (out_shader->instance_uniform_count > 0 || out_shader->instance_uniform_sampler_count > 0) {
+        // in that set, add a binding for ubo if used
+        vulkan_descriptor_set_config* set_config = &out_shader->config.descriptor_sets[out_shader->config.descriptor_set_count];
+
+        if (out_shader->instance_uniform_count > 0) {
+            u8 binding_index = set_config->binding_count;
+            set_config->bindings[binding_index].binding = binding_index;
+            set_config->bindings[binding_index].descriptorCount = 1;
+            set_config->bindings[binding_index].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            set_config->bindings[binding_index].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+            set_config->binding_count++;
+        }
+
+        // add a binding for samplers if used
+        if (out_shader->instance_uniform_sampler_count > 0) {
+            u8 binding_index = set_config->binding_count;
+            set_config->bindings[binding_index].binding = binding_index;
+            set_config->bindings[binding_index].descriptorCount = out_shader->instance_uniform_sampler_count;  // One descriptor per sampler.
+            set_config->bindings[binding_index].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            set_config->bindings[binding_index].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+            set_config->sampler_binding_index = binding_index;
+            set_config->binding_count++;
+        }
+
+        // increment the set counter
         out_shader->config.descriptor_set_count++;
     }
 
@@ -1213,6 +1268,9 @@ b8 vulkan_renderer_shader_create(shader* shader, renderpass* pass, u8 stage_coun
     for (u32 i = 0; i < 1024; ++i) {
         out_shader->instance_states[i].id = INVALID_ID;
     }
+
+    // keep a copy of the cull mode
+    out_shader->config.cull_mode = config->cull_mode;
 
     return true;
 }
@@ -1311,29 +1369,6 @@ b8 vulkan_renderer_shader_initialize(struct shader* shader) {
         offset += shader->attributes[i].size;
     }
 
-    // process uniforms
-    u32 uniform_count = darray_length(shader->uniforms);
-    for (u32 i = 0; i < uniform_count; ++i) {
-        // for samplers, the descriptor bindings need to be updated. other types of uniforms don't need anything to be done here
-        if (shader->uniforms[i].type == SHADER_UNIFORM_TYPE_SAMPLER) {
-            const u32 set_index = (shader->uniforms[i].scope == SHADER_SCOPE_GLOBAL ? DESC_SET_INDEX_GLOBAL : DESC_SET_INDEX_INSTANCE);
-            vulkan_descriptor_set_config* set_config = &s->config.descriptor_sets[set_index];
-            if (set_config->binding_count < 2) {
-                // there isn't a binding yet, meaning this is the first sampler to be added.
-                // create the binding with a single descriptor for this sampler
-                set_config->bindings[BINDING_INDEX_SAMPLER].binding = BINDING_INDEX_SAMPLER;  // always going to be the second one
-                set_config->bindings[BINDING_INDEX_SAMPLER].descriptorCount = 1;              // default to 1, will increase with each sampler added to the appropriate level
-                set_config->bindings[BINDING_INDEX_SAMPLER].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                set_config->bindings[BINDING_INDEX_SAMPLER].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-                set_config->binding_count++;
-            } else {
-                // there is already a binding for samplers, so just add a descriptor to it
-                // take the current descriptor count as the location and increment the number of descriptors
-                set_config->bindings[BINDING_INDEX_SAMPLER].descriptorCount++;
-            }
-        }
-    }
-
     // descriptor pool
     VkDescriptorPoolCreateInfo pool_info = {VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
     pool_info.poolSizeCount = 2;
@@ -1396,6 +1431,7 @@ b8 vulkan_renderer_shader_initialize(struct shader* shader) {
         stage_create_infos,
         viewport,
         scissor,
+        s->config.cull_mode,
         false,
         true,
         shader->push_constant_range_count,
@@ -1534,11 +1570,11 @@ b8 vulkan_renderer_shader_apply_globals(struct shader* s) {
 }
 
 b8 vulkan_renderer_shader_apply_instance(struct shader* s, b8 needs_update) {
-    if (!s->use_instances) {
+    vulkan_shader* internal = s->internal_data;
+    if (internal->instance_uniform_count < 1 && internal->instance_uniform_sampler_count < 1) {
         KERROR("This shader does not use instances.");
         return false;
     }
-    vulkan_shader* internal = s->internal_data;
     u32 image_index = context.image_index;
     VkCommandBuffer command_buffer = context.graphics_command_buffers[image_index].handle;
 
@@ -1553,34 +1589,36 @@ b8 vulkan_renderer_shader_apply_instance(struct shader* s, b8 needs_update) {
         u32 descriptor_index = 0;
 
         // descriptor 0 - uniform buffer
-        // only do this if the descriptor has not yet been updated
-        u8* instance_ubo_generation = &(object_state->descriptor_set_state.descriptor_states[descriptor_index].generations[image_index]);
-        // TODO: determine if an update is required
-        if (*instance_ubo_generation == INVALID_ID_U8 /*|| *global_ubo_generation != material->generation*/) {
-            VkDescriptorBufferInfo buffer_info;
-            buffer_info.buffer = internal->uniform_buffer.handle;
-            buffer_info.offset = object_state->offset;
-            buffer_info.range = s->ubo_stride;
+        if (internal->instance_uniform_count > 0) {
+            // only do this if the descriptor has not yet been updated
+            u8* instance_ubo_generation = &(object_state->descriptor_set_state.descriptor_states[descriptor_index].generations[image_index]);
+            // TODO: determine if an update is required
+            if (*instance_ubo_generation == INVALID_ID_U8 /*|| *global_ubo_generation != material->generation*/) {
+                VkDescriptorBufferInfo buffer_info;
+                buffer_info.buffer = internal->uniform_buffer.handle;
+                buffer_info.offset = object_state->offset;
+                buffer_info.range = s->ubo_stride;
 
-            VkWriteDescriptorSet ubo_descriptor = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
-            ubo_descriptor.dstSet = object_descriptor_set;
-            ubo_descriptor.dstBinding = descriptor_index;
-            ubo_descriptor.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            ubo_descriptor.descriptorCount = 1;
-            ubo_descriptor.pBufferInfo = &buffer_info;
+                VkWriteDescriptorSet ubo_descriptor = {VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+                ubo_descriptor.dstSet = object_descriptor_set;
+                ubo_descriptor.dstBinding = descriptor_index;
+                ubo_descriptor.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                ubo_descriptor.descriptorCount = 1;
+                ubo_descriptor.pBufferInfo = &buffer_info;
 
-            descriptor_writes[descriptor_count] = ubo_descriptor;
-            descriptor_count++;
+                descriptor_writes[descriptor_count] = ubo_descriptor;
+                descriptor_count++;
 
-            // update the frame generation. in this case it is only needed once since this is a buffer
-            *instance_ubo_generation = 1;
+                // update the frame generation. in this case it is only needed once since this is a buffer
+                *instance_ubo_generation = 1;  // material->generation; TODO: some generation from... somewhere
+            }
+            descriptor_index++;
         }
-        descriptor_index++;
 
-        // samplers will always be in the binding. if the binding count is less than 2, there are no samplers
-        if (internal->config.descriptor_sets[DESC_SET_INDEX_INSTANCE].binding_count > 1) {
-            // interate samplers
-            u32 total_sampler_count = internal->config.descriptor_sets[DESC_SET_INDEX_INSTANCE].bindings[BINDING_INDEX_SAMPLER].descriptorCount;
+        // interate samplers
+        if (internal->instance_uniform_sampler_count > 0) {
+            u8 sampler_binding_index = internal->config.descriptor_sets[DESC_SET_INDEX_INSTANCE].sampler_binding_index;
+            u32 total_sampler_count = internal->config.descriptor_sets[DESC_SET_INDEX_INSTANCE].bindings[sampler_binding_index].descriptorCount;
             u32 update_sampler_count = 0;
             VkDescriptorImageInfo image_infos[VULKAN_SHADER_MAX_GLOBAL_TEXTURES];
             for (u32 i = 0; i < total_sampler_count; ++i) {
@@ -1707,7 +1745,8 @@ b8 vulkan_renderer_shader_acquire_instance_resources(shader* s, texture_map** ma
     }
 
     vulkan_shader_instance_state* instance_state = &internal->instance_states[*out_instance_id];
-    u32 instance_texture_count = internal->config.descriptor_sets[DESC_SET_INDEX_INSTANCE].bindings[BINDING_INDEX_SAMPLER].descriptorCount;
+    u8 sampler_binding_index = internal->config.descriptor_sets[DESC_SET_INDEX_INSTANCE].sampler_binding_index;
+    u32 instance_texture_count = internal->config.descriptor_sets[DESC_SET_INDEX_INSTANCE].bindings[sampler_binding_index].descriptorCount;
     // wipe out the memory for the entire array, even if it isnt all used
     instance_state->instance_texture_maps = kallocate(sizeof(texture_map*) * s->instance_texture_count, MEMORY_TAG_ARRAY);
     texture* default_texture = texture_system_get_default_texture();
@@ -1721,9 +1760,11 @@ b8 vulkan_renderer_shader_acquire_instance_resources(shader* s, texture_map** ma
 
     // allocate some space in the ubo - by the stride, not by the size
     u64 size = s->ubo_stride;
-    if (!vulkan_buffer_allocate(&internal->uniform_buffer, size, &instance_state->offset)) {
-        KERROR("vulkan_material_shader_acquire_resources failed to acquire ubo space");
-        return false;
+    if (size > 0) {
+        if (!vulkan_buffer_allocate(&internal->uniform_buffer, size, &instance_state->offset)) {
+            KERROR("vulkan_material_shader_acquire_resources failed to acquire ubo space");
+            return false;
+        }
     }
 
     vulkan_shader_descriptor_set_state* set_state = &instance_state->descriptor_set_state;
@@ -1820,7 +1861,7 @@ b8 vulkan_renderer_set_uniform(shader* s, shader_uniform* uniform, const void* v
 b8 create_module(vulkan_shader* shader, vulkan_shader_stage_config config, vulkan_shader_stage* shader_stage) {
     // read the resource
     resource binary_resource;
-    if (!resource_system_load(config.file_name, RESOURCE_TYPE_BINARY, &binary_resource)) {
+    if (!resource_system_load(config.file_name, RESOURCE_TYPE_BINARY, 0, &binary_resource)) {
         KERROR("Unable to read shader module: %s.", config.file_name);
         return false;
     }
@@ -1899,7 +1940,11 @@ void vulkan_renderpass_create(renderpass* out_renderpass, f32 depth, u32 stencil
         VkAttachmentDescription depth_attachment = {};
         depth_attachment.format = context.device.depth_format;
         depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        depth_attachment.loadOp = do_clear_depth ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        if (has_prev_pass) {
+            depth_attachment.loadOp = do_clear_depth ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        } else {
+            depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        }
         depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depth_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depth_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;

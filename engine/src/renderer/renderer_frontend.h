@@ -67,12 +67,13 @@ renderpass* renderer_renderpass_get(const char* name);
 
 // @brief creates internal shader resources using the provided parameters.
 // @param s a pointer to the shader.
+// @param config a constant pointer to the shader config
 // @param pass a pointer to the renderpass to be associated with the shader.
 // @param stage_count the total number of stages.
 // @param stage_filenames an array of shader stage filenames to be loaded. Should align with stages array.
 // @param stages a array of shader_stages indicating what render stages (vertex, fragment, etc.) used in this shader.
 // @return b8 true on success, otherwise false.
-b8 renderer_shader_create(struct shader* s, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages);
+b8 renderer_shader_create(struct shader* s, const shader_config* config, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages);
 
 // @brief destroys the given shader and releases any resources held by it.
 // @param s a pointer to the shader to be destroyed.

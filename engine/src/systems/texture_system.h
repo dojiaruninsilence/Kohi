@@ -31,6 +31,21 @@ void texture_system_shutdown(void* state);
 // auto release - if a texture is no longer in use it will be released to free up memory
 texture* texture_system_acquire(const char* name, b8 auto_release);
 
+// @brief attempts to acquire a cubemap texture with the given name. if it has not yet been loaded, this trigger is to load. if the texture is not
+// found, a pointer to the default texture is returned. if the texture is found and loaded, its reference counter is incremented. requires textures
+// with name as the base, one for each side of a cube, in the following order:
+// - name_f front
+// - name_f back
+// - name_f up
+// - name_f down
+// - name_f right
+// - name_f left
+// for example, "skybox_f.png", "skybox_b.png", ect. where name is "skybox"
+// @param name the name of the texture to find. used as a base string for actual texture names
+// @param auto_release indicates if the texture should auto release when its reference count is 0. only takes effect the first time the texture is loaded
+// @return a pointer to the loaded texture. can be a pointer to the default texture if not found
+texture* texture_system_acquire_cube(const char* name, b8 auto_release);
+
 // @brief attempts to acquire a writeable texture with the given name. this does not point to  nor attempt to load a texture file.
 // does also increment the reference counter NOTE: writable textures are not auto released
 // @param name the name of the texture to be acquired

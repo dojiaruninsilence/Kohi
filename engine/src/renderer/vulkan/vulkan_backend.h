@@ -62,7 +62,7 @@ b8 vulkan_renderer_create_geometry(geometry* geometry, u32 vertex_size, u32 vert
 // destroy geometry
 void vulkan_renderer_destroy_geometry(geometry* geometry);
 
-b8 vulkan_renderer_shader_create(struct shader* shader, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages);
+b8 vulkan_renderer_shader_create(struct shader* shader, const shader_config* config, renderpass* pass, u8 stage_count, const char** stage_filenames, shader_stage* stages);
 void vulkan_renderer_shader_destroy(struct shader* s);
 
 b8 vulkan_renderer_shader_initialize(struct shader* shader);

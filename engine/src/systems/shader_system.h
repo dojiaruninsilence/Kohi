@@ -62,12 +62,6 @@ typedef struct shader {
 
     char* name;
 
-    // @brief indicates if the shader uses instances. if not, it is assumed
-    // that only global uniforms and samplers are used
-    b8 use_instances;
-    // @brief indicates if locals are used (typically for model matrices, ect.)
-    b8 use_locals;
-
     // @brief the amount of bytes that are required for ubo anlignment.
     // this is used along with the ubo size to determine the ultimate stride, which is how much the ubos are spaced
     // out in the buffer.  for example, a required alignment of 256 means that the stride must be a multiple of 256

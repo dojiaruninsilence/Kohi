@@ -6,8 +6,8 @@
 #include "core/logger.h"
 
 void vulkan_image_create(
-    vulkan_context* context,               // pass in a ponter to the vulkan context
-    VkImageType image_type,                // pass in the type of image to create
+    vulkan_context* context,  // pass in a ponter to the vulkan context
+    texture_type type,
     u32 width,                             // pass in a width
     u32 height,                            // pass in a height
     VkFormat format,                       // pass in a vulkan format
@@ -24,18 +24,28 @@ void vulkan_image_create(
 
     // here is the create info structure
     VkImageCreateInfo image_create_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};  // create the structure, with the provided vulkan structure
-    image_create_info.imageType = VK_IMAGE_TYPE_2D;                               // set image type to 2d - hard coded for now, may change- probably use a 3d image struct
-    image_create_info.extent.width = width;                                       // set the extent width
-    image_create_info.extent.height = height;                                     // set the extent height
-    image_create_info.extent.depth = 1;                                           // TODO: support configurable depth-- only need a s depth of 1 while it is a 2d image
-    image_create_info.mipLevels = 4;                                              // TODO: support mip mapping
-    image_create_info.arrayLayers = 1;                                            // TODO: support number of layers in the image
-    image_create_info.format = format;                                            // pass through
-    image_create_info.tiling = tiling;                                            // pass through - generally want to use optimal, other is linear. allows the driver to decide itself
-    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;                  // not transitioning this image from a nother memory layout
-    image_create_info.usage = usage;                                              // pass through
-    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;                            // TODO: configurable sample count -- single sampling for now
-    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;                    // TODO: configurable sharing mode
+    switch (type) {
+        default:
+        case TEXTURE_TYPE_2D:
+        case TEXTURE_TYPE_CUBE:  // intentional, there is no cube image type
+            image_create_info.imageType = VK_IMAGE_TYPE_2D;
+            break;
+    }
+
+    image_create_info.extent.width = width;                             // set the extent width
+    image_create_info.extent.height = height;                           // set the extent height
+    image_create_info.extent.depth = 1;                                 // TODO: support configurable depth-- only need a s depth of 1 while it is a 2d image
+    image_create_info.mipLevels = 4;                                    // TODO: support mip mapping
+    image_create_info.arrayLayers = type == TEXTURE_TYPE_CUBE ? 6 : 1;  // TODO: support number of layers in the image
+    image_create_info.format = format;                                  // pass through
+    image_create_info.tiling = tiling;                                  // pass through - generally want to use optimal, other is linear. allows the driver to decide itself
+    image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;        // not transitioning this image from a nother memory layout
+    image_create_info.usage = usage;                                    // pass through
+    image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;                  // TODO: configurable sample count -- single sampling for now
+    image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;          // TODO: configurable sharing mode
+    if (type == TEXTURE_TYPE_CUBE) {
+        image_create_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    }
 
     // run the vulkan function to create an image, pass in the logical device, the create info we jsust filled in, the memory allocatot, and a handle to the image that is creates, run against vk_check
     VK_CHECK(vkCreateImage(context->device.logical_device, &image_create_info, context->allocator, &out_image->handle));
@@ -62,20 +72,29 @@ void vulkan_image_create(
     VK_CHECK(vkBindImageMemory(context->device.logical_device, out_image->handle, out_image->memory, 0));  // TODO: configurable memory offset
 
     // create view
-    if (create_view) {                                                            // if set to true in info
-        out_image->view = 0;                                                      // clear view to 0
-        vulkan_image_view_create(context, format, out_image, view_aspect_flags);  // call vulkan image view create function and pass in the context, format, image assosiated with it, and any view aspect flags
+    if (create_view) {                                                                  // if set to true in info
+        out_image->view = 0;                                                            // clear view to 0
+        vulkan_image_view_create(context, type, format, out_image, view_aspect_flags);  // call vulkan image view create function and pass in the context, format, image assosiated with it, and any view aspect flags
     }
 }
 
 void vulkan_image_view_create(
-    vulkan_context* context,            // pass in a pointer to the vulkan context
+    vulkan_context* context,  // pass in a pointer to the vulkan context
+    texture_type type,
     VkFormat format,                    // pass in the vulkan format
     vulkan_image* image,                // pass in the vulcan image the view is being created for
     VkImageAspectFlags aspect_flags) {  // any aspect flags that we may or may not need
     VkImageViewCreateInfo view_create_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-    view_create_info.image = image->handle;                       // use the image handle for the image
-    view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;            // TODO: make configurable
+    view_create_info.image = image->handle;  // use the image handle for the image
+    switch (type) {
+        case TEXTURE_TYPE_CUBE:
+            view_create_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+            break;
+        default:
+        case TEXTURE_TYPE_2D:
+            view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            break;
+    }
     view_create_info.format = format;                             // pass through
     view_create_info.subresourceRange.aspectMask = aspect_flags;  // pass in any needed or wanted
 
@@ -83,7 +102,7 @@ void vulkan_image_view_create(
     view_create_info.subresourceRange.baseMipLevel = 0;
     view_create_info.subresourceRange.levelCount = 1;
     view_create_info.subresourceRange.baseArrayLayer = 0;
-    view_create_info.subresourceRange.layerCount = 1;
+    view_create_info.subresourceRange.layerCount = type == TEXTURE_TYPE_CUBE ? 6 : 1;
 
     // use the vulkan function to create an image view, pass in the logical device, the info just created, memory allocator, and an address to the view
     VK_CHECK(vkCreateImageView(context->device.logical_device, &view_create_info, context->allocator, &image->view));
@@ -93,6 +112,7 @@ void vulkan_image_view_create(
 // pass it pointers to the context, a command buffer, and a vulkan image, also pass it the format, and the old and new layouts
 void vulkan_image_transition_layout(
     vulkan_context* context,
+    texture_type type,
     vulkan_command_buffer* command_buffer,
     vulkan_image* image,
     VkFormat format,
@@ -111,7 +131,7 @@ void vulkan_image_transition_layout(
     barrier.subresourceRange.baseMipLevel = 0;
     barrier.subresourceRange.levelCount = 1;
     barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.layerCount = type == TEXTURE_TYPE_CUBE ? 6 : 1;
 
     VkPipelineStageFlags source_stage;
     VkPipelineStageFlags dest_stage;
@@ -157,6 +177,7 @@ void vulkan_image_transition_layout(
 // @param the buffer whose data will be copied
 void vulkan_image_copy_from_buffer(
     vulkan_context* context,
+    texture_type type,
     vulkan_image* image,
     VkBuffer buffer,
     vulkan_command_buffer* command_buffer) {
@@ -169,13 +190,13 @@ void vulkan_image_copy_from_buffer(
     region.bufferImageHeight = 0;
 
     region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;        // not using yet, have to change a bunch before this first
-    region.imageSubresource.baseArrayLayer = 0;  // not using layers
-    region.imageSubresource.layerCount = 1;      // so only the one
+    region.imageSubresource.mipLevel = 0;                                    // not using yet, have to change a bunch before this first
+    region.imageSubresource.baseArrayLayer = 0;                              // not using layers
+    region.imageSubresource.layerCount = type == TEXTURE_TYPE_CUBE ? 6 : 1;  // so only the one
 
     region.imageExtent.width = image->width;  // get the width and height from the image
     region.imageExtent.height = image->height;
-    region.imageExtent.depth = 1;  // these are only 2d images here - need more stuff to work with 3d images
+    region.imageExtent.depth = 1;
 
     vkCmdCopyBufferToImage(
         command_buffer->handle,

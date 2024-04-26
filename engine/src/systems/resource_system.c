@@ -21,7 +21,7 @@ typedef struct resource_system_state {
 static resource_system_state* state_ptr = 0;
 
 // internal function that does the work of actually loading the files
-b8 load(const char* name, resource_loader* loader, resource* out_resource);
+b8 load(const char* name, resource_loader* loader, void* params, resource* out_resource);
 
 // initialize the resource system, will be handled in 2 steps, first stem the pointer to the state is not passed in, and the memory requirememnts are obtained
 // it actually initializes the second time the function is called, after memory has been allocated to hold the system
@@ -105,14 +105,14 @@ b8 resource_system_register_loader(resource_loader loader) {
 
 // load functions
 // used by the system
-b8 resource_system_load(const char* name, resource_type type, resource* out_resource) {
+b8 resource_system_load(const char* name, resource_type type, void* params, resource* out_resource) {
     if (state_ptr && type != RESOURCE_TYPE_CUSTOM) {
         // Select loader.
         u32 count = state_ptr->config.max_loader_count;
         for (u32 i = 0; i < count; ++i) {
             resource_loader* l = &state_ptr->registered_loaders[i];
             if (l->id != INVALID_ID && l->type == type) {
-                return load(name, l, out_resource);
+                return load(name, l, params, out_resource);
             }
         }
     }
@@ -123,14 +123,14 @@ b8 resource_system_load(const char* name, resource_type type, resource* out_reso
 }
 
 // used by user code
-b8 resource_system_load_custom(const char* name, const char* custom_type, resource* out_resource) {
+b8 resource_system_load_custom(const char* name, const char* custom_type, void* params, resource* out_resource) {
     if (state_ptr && custom_type && string_length(custom_type) > 0) {  // verify there is a state, a type was passed in, and the type had some value
         // select the loader
         u32 count = state_ptr->config.max_loader_count;
         for (u32 i = 0; i < count; ++i) {                                                                                 // iterate through all of the loaders
             resource_loader* l = &state_ptr->registered_loaders[i];                                                       // get a pointer to the loader in the array at index i
             if (l->id != INVALID_ID && l->type == RESOURCE_TYPE_CUSTOM && strings_equali(l->custom_type, custom_type)) {  // if the id is valid, the type is custom, and the passed in custom type matches the type at index i
-                return load(name, l, out_resource);                                                                       // load the resource and return it
+                return load(name, l, params, out_resource);                                                               // load the resource and return it
             }
         }
     }
@@ -163,7 +163,7 @@ const char* resource_system_base_path() {
 }
 
 // internal function that does the work of actually loading the files
-b8 load(const char* name, resource_loader* loader, resource* out_resource) {
+b8 load(const char* name, resource_loader* loader, void* params, resource* out_resource) {
     if (!name || !loader || !loader->load || !out_resource) {  // verify that all of the proper data was passed in
         if (out_resource) {
             out_resource->loader_id = INVALID_ID;
@@ -173,5 +173,5 @@ b8 load(const char* name, resource_loader* loader, resource* out_resource) {
 
     // store the id in the resulting struct
     out_resource->loader_id = loader->id;
-    return loader->load(loader, name, out_resource);  // use load function to load the loader, and return it
+    return loader->load(loader, name, params, out_resource);  // use load function to load the loader, and return it
 }

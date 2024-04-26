@@ -19,8 +19,9 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
     VkPipelineShaderStageCreateInfo* stages,        // a pointer to a vulkan pipeline stage create info struct
     VkViewport viewport,                            // a vulkan viewport
     VkRect2D scissor,                               // scissor is the area that is rendered and what is clipped off
-    b8 is_wireframe,                                // is it a wirframe
-    b8 depth_test_enabled,                          // for depth attachments and such
+    face_cull_mode cull_mode,
+    b8 is_wireframe,        // is it a wirframe
+    b8 depth_test_enabled,  // for depth attachments and such
     u32 push_constant_range_count,
     range* push_constant_ranges,
     vulkan_pipeline* out_pipeline) {  // pointer to where the pipeline created will be
@@ -39,9 +40,23 @@ b8 vulkan_graphics_pipeline_create(                 // returns a bool
     rasterizer_create_info.rasterizerDiscardEnable = VK_FALSE;                                        // rasterizer discard enabled is turned off
     rasterizer_create_info.polygonMode = is_wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;  // set polygon mode to line if wireframe is enabled, fill if not
     rasterizer_create_info.lineWidth = 1.0f;                                                          // belive this would be for the wire frame mode
-    rasterizer_create_info.cullMode = VK_CULL_MODE_BACK_BIT;                                          // set the cull mode to back bit - cull the back faces, so they dont show
-    rasterizer_create_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;                               // believe this means that the z axis positive points out of the screen
-    rasterizer_create_info.depthBiasEnable = VK_FALSE;                                                // depth bias is disabled
+    switch (cull_mode) {
+        case FACE_CULL_MODE_NONE:
+            rasterizer_create_info.cullMode = VK_CULL_MODE_NONE;
+            break;
+        case FACE_CULL_MODE_FRONT:
+            rasterizer_create_info.cullMode = VK_CULL_MODE_FRONT_BIT;
+            break;
+        default:
+        case FACE_CULL_MODE_BACK:
+            rasterizer_create_info.cullMode = VK_CULL_MODE_BACK_BIT;
+            break;
+        case FACE_CULL_MODE_FRONT_AND_BACK:
+            rasterizer_create_info.cullMode = VK_CULL_MODE_FRONT_AND_BACK;
+            break;
+    }
+    rasterizer_create_info.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;  // believe this means that the z axis positive points out of the screen
+    rasterizer_create_info.depthBiasEnable = VK_FALSE;                   // depth bias is disabled
     rasterizer_create_info.depthBiasConstantFactor = 0.0f;
     rasterizer_create_info.depthBiasClamp = 0.0f;
     rasterizer_create_info.depthBiasSlopeFactor = 0.0f;
